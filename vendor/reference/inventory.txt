@@ -1,0 +1,43 @@
+$ tex --version
+TeX 3.141592653 (TeX Live 2025/dev/Debian)
+kpathsea version 6.4.0/dev
+Copyright 2024 D.E. Knuth.
+There is NO warranty.  Redistribution of this software is
+covered by the terms of both the TeX copyright and
+the Lesser GNU General Public License.
+For more information about these matters, see the file
+named COPYING and the TeX source.
+Primary author of TeX: D.E. Knuth.
+[exit 0]
+$ tangle --version
+TANGLE 4.6 (TeX Live 2025/dev/Debian)
+kpathsea version 6.4.0/dev
+There is NO warranty.  Redistribution of this software is
+covered by the terms of both the TANGLE copyright and
+the Lesser GNU General Public License.
+For more information about these matters, see the file
+named COPYING and the TANGLE source.
+Primary author of TANGLE: D.E. Knuth.
+[exit 0]
+$ dpkg-query -W texlive-binaries texlive-base
+texlive-base	2024.20250309-1
+texlive-binaries	2024.20240313.70630+ds-6
+[exit 0]
+$ ldd /usr/bin/tex
+	linux-vdso.so.1 (0x00007f250f031000)
+	libkpathsea.so.6 => /lib/x86_64-linux-gnu/libkpathsea.so.6 (0x00007f250eefc000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f250ed08000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007f250f033000)
+[exit 0]
+$ kpsewhich -all texmf.cnf
+/etc/texmf/web2c/texmf.cnf
+/usr/share/texmf/web2c/texmf.cnf
+/usr/share/texlive/texmf-dist/web2c/texmf.cnf
+[exit 0]
+$ kpsewhich tex.fmt
+[exit 1]
+$ kpsewhich tex.pool
+[exit 1]
+52379f83902820bbcdf5df14a8b685025358639655acb41e225b2221e106d45d  /usr/bin/tex
+1152edb7967e254091b829f5aca18147d977745e7d05dc1ca70fbe878a80ef3b  /usr/bin/tangle
+47eb0396577b8ae1f0ee4b6641d4416620172476554e6468922c5a353f430e37  /usr/bin/kpsewhich
