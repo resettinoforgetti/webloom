@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 import time
 
+from build_reference import verify_candidate
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "vendor/knuth"
 
@@ -79,21 +81,13 @@ def compare(expected, actual, diff_path):
             "diff": str(diff_path)}
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build", type=Path, default=ROOT / "target/reference-build")
-    parser.add_argument("--output", type=Path, default=ROOT / "target/reference-runs")
-    args = parser.parse_args()
-    build = args.build.resolve()
-    report = json.loads((build / "webloom-build.json").read_text())
-    if report["status"] != "built_candidate":
-        raise SystemExit("A successful pinned candidate build is required.")
+def capture(build, output_root, clock_environment=None):
+    build = Path(build).resolve()
+    report = verify_candidate(build)
     binaries = build / "texk/web2c"
-    for name in ("tex", "pltotf", "tftopl", "dvitype"):
-        if sha256(binaries / name) != report["binary_sha256"][name]:
-            raise SystemExit(f"Built executable changed: {name}")
-    args.output.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix="trip-", dir=args.output.resolve()))
+    output_root = Path(output_root).resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="trip-", dir=output_root))
     print(f"Retaining all TRIP evidence in {work}", flush=True)
     for name in ("trip.tex", "trip.pl"):
         shutil.copyfile(FIXTURES / name, work / name)
@@ -124,13 +118,17 @@ MKTEXFMT = 0
 MKTEXTFM = 0
 MKTEXTEX = 0
 """)
-    # Do not inherit user's TeX configuration. Classic onlyTeX ignores
-    # SOURCE_DATE_EPOCH: record this limitation rather than claiming clock control.
+    # Do not inherit user's TeX configuration. The final WEB change fixes the
+    # clock independently of these host settings; qualification probes that.
     env = {"PATH": os.defpath, "LC_ALL": "C", "TZ": "UTC",
            "TEXMFCNF": str(work), "shell_escape": "f", "MKTEXFMT": "0",
            "MKTEXTFM": "0", "MKTEXTEX": "0"}
+    if clock_environment:
+        if set(clock_environment) - {"TZ", "SOURCE_DATE_EPOCH", "FORCE_SOURCE_DATE"}:
+            raise ValueError("Only clock environment overrides are supported")
+        env.update(clock_environment)
     results = {"qualified": False, "environment": env, "build_report_sha256": sha256(build / "webloom-build.json"),
-               "clock_control": "uncontrolled: classic onlyTeX excludes SOURCE_DATE_EPOCH/FORCE_SOURCE_DATE",
+               "profile": report["lock"]["profile"], "clock_profile": report["lock"]["clock"],
                "inputs": {name: sha256(work / name) for name in ("trip.tex", "trip.pl", "texmf.cnf")},
                "steps": {}, "comparisons": {}}
     summary = work / "result.json"
@@ -170,6 +168,18 @@ MKTEXTEX = 0
         results["artifacts"] = {p.name: {"bytes": p.stat().st_size, "sha256": sha256(p)} for p in work.iterdir() if p.is_file() and p != summary}
         summary.write_text(json.dumps(results, indent=2) + "\n")
     print(f"{results['status']}: {summary}")
+    return work, results
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--build", type=Path, default=ROOT / "target/reference-build-v1")
+    parser.add_argument("--output", type=Path, default=ROOT / "target/reference-runs")
+    args = parser.parse_args()
+    try:
+        _, results = capture(args.build, args.output)
+    except (ValueError, OSError, KeyError) as error:
+        raise SystemExit(str(error)) from error
     # Qualification always needs review of the raw differences and clock/profile
     # adaptations, even if all selected artifacts happen to match byte for byte.
     return 1 if results["status"] == "failed" else 2
