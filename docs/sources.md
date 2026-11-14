@@ -82,17 +82,18 @@ Local supporting input origins:
 - `/etc/texmf/web2c/texmf.cnf`
 - `/usr/share/doc/texlive-binaries/copyright`
 
-## Pinned reference candidate added 2026-11-14
+## Pinned reference profile (`webloom-classic-reference-v1`)
 
-The new `scripts/reference-build.json` pins TeX Live source commit
-`dce038dd1bd98fac739254da4a2066c8347cdf6c`, the complete ordered TeX change-file
-chain, configure flags, and source epoch. `scripts/build_reference.py` verifies
-the clean checkout and normative tex.web hash before building. Source timestamps
-are normalized to the pinned epoch to avoid regenerating shipped generated
-files; source bytes are not patched.
+`scripts/reference-build.json` pins TeX Live source commit
+`dce038dd1bd98fac739254da4a2066c8347cdf6c`, the complete ordered upstream TeX
+change-file chain, the checked local clock adaptation `scripts/reference-clock.ch`,
+configure flags, and source epoch. `scripts/build_reference.py` verifies the
+clean checkout, normative `tex.web` hash, and local change checksum before
+building. Source timestamps are normalized to the pinned epoch to avoid
+regenerating shipped generated files; upstream source bytes are not patched.
 
 Each build retains compiler/tool versions, build commands/logs, change-file and
 generated-source hashes, executable hashes, and linked-library paths/hashes in
-`webloom-build.json`. This candidate is separate from the historical installed
-Debian engine above. Its full provenance is now known, but profile/clock
-qualification remains pending; see [reference.md](reference.md).
+`webloom-build.json`. This profile is separate from the historical installed
+Debian engine above and passes the two-build TRIP qualification gate in
+`scripts/reference_trip.py`; see [reference.md](reference.md).
