@@ -552,22 +552,20 @@ impl SemanticNest {
     /// §211: `print_mode(m)`.
     pub fn print_mode(io: &mut IoState, m: i32) {
         let denom = i32::from(cmd::MAX_COMMAND) + 1;
-        if m > 0 {
-            match m / denom {
+        match m.cmp(&0) {
+            std::cmp::Ordering::Greater => match m / denom {
                 0 => io.print_str(pool_str("vertical")),
                 1 => io.print_str(pool_str("horizontal")),
                 2 => io.print_str(pool_str("display math")),
                 _ => {}
-            }
-        } else if m == 0 {
-            io.print_str(pool_str("no"));
-        } else {
-            match (-m) / denom {
+            },
+            std::cmp::Ordering::Equal => io.print_str(pool_str("no")),
+            std::cmp::Ordering::Less => match (-m) / denom {
                 0 => io.print_str(pool_str("internal vertical")),
                 1 => io.print_str(pool_str("restricted horizontal")),
                 2 => io.print_str(pool_str("math")),
                 _ => {}
-            }
+            },
         }
         io.print_str(pool_str(" mode"));
     }
@@ -914,8 +912,8 @@ impl Eqtb {
         }
 
         // §240: Region 5 initialization.
-        for k in layout.int_base..layout.del_code_base {
-            eqtb.words[k].set_int(0);
+        for word in &mut eqtb.words[layout.int_base..layout.del_code_base] {
+            word.set_int(0);
         }
         eqtb.set_int_par(MAG_CODE, 1000);
         eqtb.set_int_par(TOLERANCE_CODE, 10000);
@@ -929,8 +927,8 @@ impl Eqtb {
         eqtb.set_del_code(b'.', 0);
 
         // §250: Region 6 initialization.
-        for k in layout.dimen_base..=layout.eqtb_size {
-            eqtb.words[k].set_int(0);
+        for word in &mut eqtb.words[layout.dimen_base..=layout.eqtb_size] {
+            word.set_int(0);
         }
 
         // §258: frozen_dont_expand.
@@ -1334,8 +1332,8 @@ impl HashTable {
         // §261: Compute the hash code h.
         let hash_prime = io.config.hash_prime;
         let mut h = usize::from(io.buffer[j]);
-        for k in (j + 1)..(j + l) {
-            h = h + h + usize::from(io.buffer[k]);
+        for &character in &io.buffer[(j + 1)..(j + l)] {
+            h = h + h + usize::from(character);
             while h >= hash_prime {
                 h -= hash_prime;
             }
@@ -2855,8 +2853,8 @@ impl SaveStack {
 
     /// §285: Search `save_stack` for equivalents that point to `p`.
     pub fn search_save_stack(&self, io: &mut IoState, p: u16) {
-        for q in 0..self.save_ptr {
-            if self.stack[q].rh() == p {
+        for (q, word) in self.stack[..self.save_ptr].iter().enumerate() {
+            if word.rh() == p {
                 io.print_nl(pool_str("SAVE("));
                 io.print_int(q as i32);
                 io.print_char(b')');
@@ -3013,9 +3011,10 @@ pub fn show_token_list(
 
 /// §295: `token_show(p)`.
 pub fn token_show(io: &mut IoState, eqtb: &Eqtb, hash: &HashTable, memory: &Memory, p: MemPtr) {
-    if p != MemPtr::NULL
-        && let Ok(first) = memory.link(p)
-    {
+    if p != MemPtr::NULL {
+        let Ok(first) = memory.link(p) else {
+            return;
+        };
         show_token_list(
             io,
             eqtb,
