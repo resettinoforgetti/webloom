@@ -1,7 +1,9 @@
-//! Knuth, tex.web §§1–98, 103, 241–246, 511–538. Detailed contracts: docs/semantics.md.
+//! Knuth, tex.web §§1–98, 103, 177–178, 241–246, 511–538. Detailed contracts: docs/semantics.md.
 
 use crate::arithmetic::Scaled;
+use crate::memory::{FIL_ORDER, FILLL_ORDER, MemPtr, Memory, NORMAL_ORDER};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::OnceLock;
 
 /// §2: Banner printed when TeX starts.
 pub const BANNER: &str = "This is TeX, Version 3.141592653";
@@ -106,6 +108,28 @@ impl StrNum {
     }
 }
 
+/// Resolve a WEB string literal to its exact TANGLE `StrNum` (`0..=255` for 1-byte ASCII, `256..=1300` in `TEX.POOL`).
+pub fn pool_str(lit: &str) -> StrNum {
+    if lit.len() == 1 {
+        return StrNum::from_ascii(lit.as_bytes()[0]);
+    }
+    static POOL_INDEX: OnceLock<BTreeMap<&'static str, StrNum>> = OnceLock::new();
+    let map = POOL_INDEX.get_or_init(|| {
+        let text = std::str::from_utf8(PINNED_TEX_POOL).expect("valid ASCII pool");
+        let mut m = BTreeMap::new();
+        for (idx, line) in text.lines().enumerate() {
+            if line.starts_with('*') {
+                break;
+            }
+            let body = &line[2..];
+            m.insert(body, StrNum((256 + idx) as u16));
+        }
+        m
+    });
+    *map.get(lit)
+        .unwrap_or_else(|| panic!("string literal {lit:?} not found in pinned TEX.POOL"))
+}
+
 /// §§6, 35, 81: Control-transfer target when TeX aborts or terminates early.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Termination {
@@ -115,14 +139,17 @@ pub enum Termination {
     FinalEnd,
 }
 
-/// §§11–14, 111, 522: Capacity parameters and consistency checks for I/O and strings.
+/// §§11–14, 111, 290, 522: Capacity parameters and consistency checks for I/O, strings, and tables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IoConfig {
     pub buf_size: usize,
     pub error_line: usize,
     pub half_error_line: usize,
     pub max_print_line: usize,
+    pub stack_size: usize,
     pub max_in_open: usize,
+    pub param_size: usize,
+    pub nest_size: usize,
     pub max_strings: usize,
     pub string_vacancies: usize,
     pub pool_size: usize,
@@ -142,7 +169,10 @@ impl Default for IoConfig {
             error_line: 72,
             half_error_line: 42,
             max_print_line: 79,
+            stack_size: 200,
             max_in_open: 6,
+            param_size: 60,
+            nest_size: 40,
             max_strings: 3000,
             string_vacancies: 8000,
             pool_size: 32000,
@@ -170,7 +200,7 @@ impl IoConfig {
         }
     }
 
-    /// §§13–14, 111, 522: Evaluate `bad` constant checks in source order.
+    /// §§13–14, 111, 290, 522: Evaluate `bad` constant checks in source order.
     pub fn check_constants(&self) -> Result<(), u8> {
         let mut bad = 0_u8;
         if self.half_error_line < 30 || self.half_error_line + 15 > self.error_line {
@@ -199,6 +229,10 @@ impl IoConfig {
         }
         if self.buf_size == 0 || self.buf_size > 65535 {
             bad = 18;
+        }
+        // §290: cs_token_flag (4095) + undefined_control_sequence (781 + hash_size) > max_halfword (65535).
+        if 4095usize.saturating_add(781).saturating_add(self.hash_size) > 65535 {
+            bad = 21;
         }
         if FORMAT_DEFAULT_LENGTH > self.file_name_size {
             bad = 31;
@@ -714,7 +748,8 @@ impl IoState {
     /// Create a new I/O and string subsystem after validating `IoConfig::check_constants`.
     pub fn new(config: IoConfig, host: HostFixture) -> Result<Self, u8> {
         config.check_constants()?;
-        let mut input_stack = vec![InStateRecord::default(); config.buf_size.max(8)];
+        let mut input_stack =
+            vec![InStateRecord::default(); config.stack_size.max(config.buf_size).max(8) + 1];
         let cur_input = InStateRecord {
             state_field: 33, // new_line
             index_field: 0,
@@ -1473,6 +1508,48 @@ impl IoState {
             if s <= delta {
                 break;
             }
+        }
+    }
+
+    /// §177: `print_glue(d, order, s)`.
+    pub fn print_glue(&mut self, d: Scaled, mut order: i32, s: StrNum) {
+        self.print_scaled(d);
+        if order < i32::from(NORMAL_ORDER) || order > i32::from(FILLL_ORDER) {
+            self.print_str(pool_str("foul"));
+        } else if order > i32::from(NORMAL_ORDER) {
+            self.print_str(pool_str("fil"));
+            while order > i32::from(FIL_ORDER) {
+                self.print_char(b'l');
+                order -= 1;
+            }
+        } else if s != StrNum::ZERO {
+            self.print_str(s);
+        }
+    }
+
+    /// §178: `print_spec(p, s)`.
+    pub fn print_spec(&mut self, memory: &Memory, p: i32, s: StrNum) {
+        let stats = memory.stats();
+        let mem_min = i32::from(memory.config().mem_bot);
+        if p < mem_min || p >= i32::from(stats.lo_mem_max) {
+            self.print_char(b'*');
+            return;
+        }
+        let Ok(spec) = memory.glue_spec(MemPtr::from_address(p as u16)) else {
+            self.print_char(b'*');
+            return;
+        };
+        self.print_scaled(spec.width);
+        if s != StrNum::ZERO {
+            self.print_str(s);
+        }
+        if spec.stretch != Scaled::ZERO {
+            self.print_str(pool_str(" plus "));
+            self.print_glue(spec.stretch, i32::from(spec.stretch_order), s);
+        }
+        if spec.shrink != Scaled::ZERO {
+            self.print_str(pool_str(" minus "));
+            self.print_glue(spec.shrink, i32::from(spec.shrink_order), s);
         }
     }
 
