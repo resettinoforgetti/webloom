@@ -2,6 +2,7 @@
 //! Algorithms derived from Donald E. Knuth's TeX 3.141592653.
 
 pub mod arithmetic;
+mod expansion;
 pub mod io;
 pub mod memory;
 pub mod scanner;

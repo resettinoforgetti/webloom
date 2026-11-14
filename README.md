@@ -7,6 +7,9 @@ Implemented: scaled arithmetic (`§§99–108`), indexed single-word/variable-si
 memory allocation (`§§110–130, 162–164`), character translation, line buffers,
 string pool (`TEX.POOL`), multi-selector printing, error/interaction handling,
 and Part 29 file-name/transcript routines (`§§1–98, 241–246, 511–538`).
+M4 now adds command/equivalent/hash/save tables, token/input stacks, lexical
+scanning, and macro argument matching (`§§387–401`). General expansion,
+definition scanning, conditionals, and assignment execution remain unfinished.
 No dependencies; stable Rust 1.85 or later, edition 2024.
 
 Run `cargo test`, `cargo test --release`, and `cargo run -- --version`.

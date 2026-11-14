@@ -17,17 +17,26 @@ formal title. Starred part titles and routine identifiers are taken from source.
 | 109 | Glue ratios | Discussed in `semantics.md` | Unimplemented (`M5`) |
 | 110–113 | Packed data; range checks; conversions; variant records | `memory::Word`; `overlapping_views_have_one_backing_value` | Integer/half/quarter subset; `glue_ratio` absent |
 | 115–118 | Dynamic memory allocation; regions; statistics; `avail`/`link`/`info` | `Memory`, `MemPtr`, `MemoryStats`; mixed sequence tests | Implemented allocation subset |
-| 119 | Runaway diagnostic dependencies | Explicit terminal `MemoryError` | Token-list runaway text deferred to `M4` |
+| 119 | Runaway diagnostic dependencies | `Scanner::runaway` and scanner allocation/error hooks; `scanner.rs`, `macro_arguments.rs` tests | Implemented token diagnostics |
 | 120 | `get_avail` | `Memory::get_avail`; frontier order/exhaustion tests | Implemented |
-| 121–122 | `free_avail` / `fast_get_avail` | No dedicated API; `flush_list` handles singleton reclamation | Unimplemented macros, no stubs |
+| 121–122 | `free_avail` / `fast_get_avail` | `Memory::free_avail`; scanner allocation through `get_avail` | `free_avail` implemented; no separate fast macro API |
 | 123 | `flush_list` | `Memory::flush_list`; order, null, cycles, double reclaim tests | Implemented with precondition validation |
 | 124–130 | Variable-size free ring; `get_node`; `free_node` | `memory.rs`; `variable_memory.rs` and independent interval-model tests | Implemented, including merge-only sentinel |
 | 133,150 | `type`/`subtype`; glue specification layout | `Memory::initialize`; static glue tests | Layout dependencies only |
 | 162–164 | Memory layout; initialization variable; table entries | `Memory::initialize`; `initialization_matches_static_layout` | Memory subset, not full INITEX |
+| 207–210 | The command codes | `tables::cmd`, `print_cmd_chr`; `tables.rs` tests | Implemented codes/diagnostics; execution is separate |
+| 211–219 | The semantic nest | `SemanticNest`, list-state push/pop and mode printing; `tables.rs` tests | Storage subset; activity/node display pending |
+| 220–255 | The table of equivalents | `Eqtb`, six-region initialization/access, diagnostics; `tables.rs` tests | Table subset; box diagnostics depend on M5 |
 | 241–246 | `fix_date_and_time`; `escape_char`/`new_line_char`; `begin_diagnostic`/`end_diagnostic` | `Clock`, `IoState::fix_date_and_time`, `begin_diagnostic`, `end_diagnostic`; `io_strings_errors.rs` | Implemented I/O subset |
-| 300–302,328–329 | `in_state_record`; `begin_file_reading`; `end_file_reading` | `InStateRecord`, `IoState::begin_file_reading_default`, `end_file_reading_default` | File-input subset; token lists in `M4` |
+| 256–267 | The hash table | `HashTable`, `id_lookup`, control-sequence printing, `primitive`; `tables.rs` tests | Implemented |
+| 268–288 | Saving and restoring equivalents | `SaveStack` levels, local/global definitions, `unsave`, after-group tokens, magnification; `tables.rs` tests | Implemented except box destruction; caller inserts returned after-group tokens |
+| 289–299 | Token lists; syntactic routine state and diagnostics | `Token`, `store_new_token`, `show_token_list`, `print_meaning`, `show_cur_cmd_chr`; `tables.rs` tests | Implemented |
+| 300–331 | Input stacks/states; context; maintaining input stacks | `Scanner` token/file inputs, `show_context`, backtracking, reference/parameter cleanup; `scanner.rs` tests | Implemented scanner subset; alignment integration pending |
+| 332–365 | Getting the next token | `Scanner::get_next`, `get_token`, outer-token recovery and live error hooks; `scanner.rs` tests | Lexical/token-list subset; alignment template dispatch pending |
+| 387–401 | Macro invocation; argument matching | `Engine::macro_call` in `expansion.rs`; `macro_arguments.rs`, shared reference fixtures | Implemented for valid compiled macro definitions; expansion dispatch/definition scanning pending |
 | 511–525,527–538 | File names; `begin_name`/`more_name`/`end_name`; `pack_file_name`; `pack_buffered_name`; `open_fmt_file`; `make_name_string`; `prompt_file_name`; `open_log_file`; `start_input_after_scan` | `IoState` file-name, log-banner, and file-lookup routines; `io_strings_errors.rs` | Implemented (`§526` `scan_file_name` token loop in `M4`) |
 | 797,820,981 | `end_span`, `active`, `page_ins_head` initialization | `Memory::initialize`; reserved word assertions | Initialization only |
+| 1336 | `init_prim` | `Engine::init_prim`, `HashTable::init_prim`; primitive-table tests | Registration only, not complete INITEX or primitive execution |
 
 All of `§§99–108` are now implemented, including `half` (§100), `round_decimals`
 (§102), and `print_scaled` (§103) verified by exact round-trip across all 65,537
@@ -41,6 +50,6 @@ The independent interval model also checks ring links, allocation-kind metadata,
 and the complete low-region partition. §126 retains division of the nonnegative
 frontier difference. §§131–132 `sort_avail` remain a format-preparation dependency.
 
-Next engine slice: commands, equivalents/hash/save tables, tokens/input stacks,
-scanners, expansion, and conditionals (`M4`) in [the roadmap](roadmap.md). The
+Next engine slices: expansion dispatch, basic value scanners, definition
+scanning, conditionals, and assignments (`M4`) in [the roadmap](roadmap.md). The
 full [coverage ledger](coverage.md) assigns every source part to a milestone.

@@ -1,0 +1,13 @@
+# name<TAB>delimiter<TAB>input<TAB>quoted argument; spaces are significant
+single		x	"x"
+spaces		   x	"x"
+group		{xy}	"xy"
+nested		{{xy}}	"{xy}"
+empty		{}	""
+overlap-aab	aab	aaab	"a"
+overlap-abab	abab	abaabab	"aba"
+partial-mismatch	ab	aac ab	"aac "
+protected	!	{x!y}!	"x!y"
+two-groups	!	{x}{y}!	"{x}{y}"
+empty-delimited	!	!	""
+group-space	!	{} !	"{} "

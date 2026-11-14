@@ -151,7 +151,7 @@ responses, the 100-error fatal threshold, `normalize_selector`, `fatal_error`,
 `overflow`, `confusion`, and `pause_for_instructions`, returning explicit
 `Result<_, Termination>` (`JumpOut` / `FinalEnd`) instead of non-local `goto`.
 Syntactic/token callbacks (`show_context`, `get_token`, `give_err_help`) are
-routed through `ErrorHooks` until M4 is attached.
+routed through `ErrorHooks`; `Engine::error` attaches live `ScannerErrorHooks`.
 
 File-name routines (`§§511–538`) split `:`/`>` areas and `.` extensions, pack
 fixed-width `name_of_file`, format the `§536` transcript banner using the host
@@ -159,3 +159,48 @@ fixed-width `name_of_file`, format the `§536` transcript banner using the host
 `TeXinputs:` inside the deterministic `HostFixture`. No ambient OS filesystem
 search, locale decoding, or external command execution is performed. The CLI
 still rejects document typesetting, INITEX, and formats until M4–M8 are complete.
+
+## Syntactic state and macro arguments (M4, partial)
+
+`Eqtb` implements the six equivalent-table regions and level tracking;
+`HashTable` performs the source hash/probe algorithm and registers primitive
+names. Registration does not mean the primitive's execution is implemented.
+`SaveStack` restores local equivalents, preserves global assignments, and returns
+after-group tokens to its caller. Box reclamation and box/nest display still
+depend on later node algorithms. `SemanticNest` stores and pushes/pops list state.
+
+`Scanner::get_next` and `get_token` implement category-code lexical states,
+control-sequence lookup, ^^ conversion, comments/spaces/end-of-line handling,
+outer-token recovery, and token-list parameter substitution. Token inputs retain
+reference-counted macro bodies and reclaim owned backed-up lists and parameters
+when popped. Full alignment-template processing remains outside this slice.
+
+`Engine::macro_call` (§§387–401) requires a valid compiled macro selected by
+`get_token`: `cur_cs` identifies its equivalent and `cur_chr` its reference-count
+head. Parameter text contains at most nine `match` tokens followed by
+`end_match`; replacement text uses numbered `out_param` tokens. Definition
+scanning and general `get_x_token`/`expand` dispatch remain unimplemented; the
+API does not execute raw `\def` input.
+
+Arguments are scanned without expansion, using full token equality (including
+category codes). Undelimited arguments skip spaces and consume one token/group;
+delimited arguments match only outside groups and retain overlapping delimiter
+prefixes. Exactly one enclosing group is stripped when it forms the entire
+argument. A delimiter ending in `#{` corrects `align_state` before the brace
+is scanned again in the replacement text. Compulsory prefix mismatches consume
+the mismatch and discard the call, as in §398.
+
+Non-long paragraph recovery returns `\par` to the input, releases already
+collected arguments, and corrects unmatched braces. A delimiter may itself
+contain `\par`, including the partial-match exception described in §397.
+Extra right braces use §395's inserted-paragraph recovery; forbidden outer
+tokens use the scanner's existing recovery and avoid a duplicate runaway error.
+The caller's scanner status and warning index are restored on return, including
+terminal `Termination` results. Terminal overflow ends execution and does not
+promise reusable partial argument lists.
+
+Collected arguments remain off `param_stack` until exhausted inputs have been
+popped. This preserves old parameters while scanning nested arguments and
+reclaims old inputs for tail calls. The new body holds a reference until popped,
+and parameter capacity is checked before writing the stack. Tracing prints the
+definition and each argument via the same token diagnostics used by the scanner.

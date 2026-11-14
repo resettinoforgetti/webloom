@@ -1,6 +1,7 @@
 # Implemented design
 
-`Engine` owns `Arithmetic`, `Memory`, and `IoState`; there are no globals or
+`Engine` owns `Arithmetic`, `Memory`, `IoState`, `SemanticNest`, `Eqtb`,
+`HashTable`, `SaveStack`, and `Scanner`; there are no globals or
 ambient OS services. Arithmetic state includes the sticky error flag and
 division remainder, plus `half` (§100) and `round_decimals` (§102). `Scaled` is
 a signed integer in the source's magnitude-below-2^31 domain, not a restriction
@@ -36,6 +37,14 @@ multi-selector printing (`print_ln`, `print_char`, `print`, `slow_print`,
 non-interactive error handling (`Interaction`, `History`, `ErrorHooks`,
 `Termination`), and Part 29 file-name scanning, packing, and transcript log
 opening (`open_log_file`).
+
+`tables.rs` provides command codes, primitive registration, equivalents and hash
+lookup, save/restore, token diagnostics, and semantic nest storage. `scanner.rs`
+handles lexical state and input-list lifetimes and connects live scanner error
+hooks. `expansion.rs` implements `Engine::macro_call`: it reads unexpanded
+arguments into memory lists, then feeds the replacement text to the scanner.
+Calling code must currently supply compiled definitions and dispatch macro calls;
+the general expansion loop and definition scanner are not yet implemented.
 
 Fallible APIs separate violated internal preconditions from source arithmetic
 errors, fatal memory exhaustion, and TeX `jump_out`/`final_end` termination.
