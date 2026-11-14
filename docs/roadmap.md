@@ -41,9 +41,10 @@ WEB map, contracts, verification evidence, and coverage status with each slice.
 
 ## Interface rules and boundaries
 
-`Engine` owns semantic state; a future host boundary supplies byte streams,
-terminal interaction, explicit file search and clock values. Keep `MemPtr` as an
-index and raw memory words private. Add checked typed node access in M5.
+`Engine` owns semantic state (`Arithmetic`, `Memory`, and `IoState`), with
+`HostFixture` supplying deterministic byte streams, terminal interaction,
+explicit file search, and clock values. Keep `MemPtr` as an index and raw memory
+words private. Add checked typed node access in M5.
 
 Future CLI operations include initialization, format selection, interaction
 mode, input execution, and explicit input/output directories. Unsupported

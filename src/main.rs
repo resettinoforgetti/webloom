@@ -7,7 +7,7 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else if args.as_slice() == ["--help"] {
         println!(
-            "Usage: webloom [--version | --help]\nArithmetic and memory library only; typesetting, INITEX and formats are unsupported."
+            "Usage: webloom [--version | --help]\nArithmetic, memory, and I/O foundation library only; typesetting, INITEX and formats are unsupported."
         );
         ExitCode::SUCCESS
     } else {

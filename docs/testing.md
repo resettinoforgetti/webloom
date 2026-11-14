@@ -13,7 +13,9 @@ cargo test
 cargo test --release
 ```
 
-This workspace's toolchain lives outside the repository. Set:
+This workspace's toolchain lives outside the repository (or under a writable
+copy such as `/tmp/rustup` and `/tmp/cargo` when `/usr/local/rustup` is mounted
+read-only). Set:
 
 ```
 export RUSTUP_HOME=/workspace/.rustup

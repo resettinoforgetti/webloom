@@ -67,7 +67,9 @@ an empty read-only mount. A new Git repository was initialized at
 `/workspace/webloom`. No user source files were replaced.
 No Rust toolchain was initially installed. A workspace-local stable toolchain
 was installed using rustup: rustc 1.100.0 (0ef1bc386 2026-11-09).
-Declared MSRV 1.85 is the edition-2024 baseline; only 1.100 has been tested.
+Declared MSRV 1.85 is the edition-2024 baseline; initial bootstrap tested 1.100,
+and subsequent checkpoints and CI verify both Rust 1.85.0 and current stable
+(see [testing.md](testing.md)).
 Install command: `CARGO_HOME=/workspace/.cargo RUSTUP_HOME=/workspace/.rustup
 sh /tmp/rustup-init.sh -y --no-modify-path --profile minimal --default-toolchain
 stable`, using the installer from https://sh.rustup.rs; then
