@@ -45,27 +45,47 @@ partitioning. Fixed cases cover exact fit, singleton retention, one-word
 remainders, growth thresholds, maximum halfword bounds, merge-only behavior,
 retained payloads, and atomic invalid reclamation.
 
+I/O, string-pool, printing, error, and file-name tests (`tests/io_strings_errors.rs`
+and `tests/arithmetic.rs`) verify all `bad` constant checks (`§§14,111,522`),
+pristine and 8-bit identity `xchr`/`xord` tables, `§§48–53` string-pool
+initialization against `vendor/generated/tex.pool` plus all six `bad_pool`
+rejection paths, `input_ln` trailing-space stripping and pre/post-format buffer
+overflow (`§35`), `init_terminal` (`§37`), all print selectors and line wrapping,
+exact `print_scaled`/`round_decimals` round-trip across all 65,537 fractions in
+`0..=unity`, interactive and scrolled `error` recovery (`0..9`, `E`, `H`, `I`,
+`Q`, `R`, `S`, `X`, `?`, 100-error stop, `confusion`, `pause_for_instructions`),
+and Part 29 file-name scanning, `TeXinputs:` fallback, and `open_log_file`
+banner/clock formatting.
+
 GitHub Actions runs the checks above on Rust 1.85.0 and current stable, with both
 debug and release Rust tests. Python scripts require Python >=3.11. Reference
 builds are opt-in; routine CI tests the capture runner with small subprocesses
 without downloading or compiling TeX Live.
 
-## Reference and TRIP: candidate captured, not qualified
+## Reference and TRIP: reference profile qualified
 
-No Webloom/reference differential runner is built: Webloom exposes arithmetic/memory
-as Rust APIs, while the installed TeX executable exposes a document interpreter.
-There is no common runnable interface at this milestone. TANGLE generation and
-byte-identical source mirror comparison are provenance checks only.
+No Webloom/reference differential runner is built yet: Webloom exposes
+arithmetic, memory, and I/O/string/error subsystems as Rust APIs, while the
+reference TeX executable exposes a document interpreter. There is no common
+runnable interface at this milestone. TANGLE generation and byte-identical
+source mirror comparison are provenance checks only.
 
-A new pinned reference candidate can be built with
-`python3 scripts/build_reference.py`; capture its official TRIP sequence with
-`python3 -B scripts/reference_trip.py`. The latter returns 2 for a completed run
-requiring review, 1 for failure, and never reports qualification automatically.
-See [reference evidence](reference.md) for repeat-build results and unresolved
-profile/clock differences. The older vendored Web2C files and Debian inventory
-remain historical inputs, not the new build chain. Webloom must implement input,
-expansion, typesetting, diagnostics, INITEX and independent formats before its own
-TRIP run or document/DVI comparison is possible.
+Build and qualify the pinned reference profile with:
+
+```
+python3 -B scripts/build_reference.py
+python3 -B scripts/build_reference.py --build target/reference-build-v1-repeat
+python3 -B scripts/reference_trip.py --repeat-build target/reference-build-v1-repeat
+```
+
+Single-build capture without `--repeat-build` returns 2 (`captured_requires_review`).
+Passing `--repeat-build` runs the qualification gate across both builds, a
+perturbed clock environment (`TZ=PST8PDT`, `SOURCE_DATE_EPOCH`,
+`FORCE_SOURCE_DATE`), and the narrow Appendix A allowance validator while
+retaining raw `.diff` files; see [reference qualification](reference.md).
+Webloom must implement scanning/expansion (`M4`), typesetting (`M5–M7`), and
+INITEX/independent formats (`M8`) before its own TRIP run or document/DVI
+comparison is possible.
 
 The future two-engine runner must create separate temporary working directories with
 identical copied fixture bytes. Bound wall time (initially 30 seconds/process)
@@ -79,16 +99,13 @@ Never broadly remove numbers, whitespace, diagnostics, or DVI fields.
 Control LC_ALL=C, TZ=UTC, input bytes, fixture-only font/macro/search paths,
 working directory, time/date values, interaction mode and scripted responses.
 Disable shell escape in the reference (`-no-shell-escape` for Web2C); the new
-engine must not add an external command facility. SOURCE_DATE_EPOCH alone is
-not evidence that a classic executable's time inputs are controlled: verify its
-effect or use a documented clock adaptation. Build equivalent formats separately;
-do not feed a distribution .fmt file into Webloom.
+engine must not add an external command facility. Build equivalent formats
+separately; do not feed a distribution .fmt file into Webloom.
 
 ## Exact TRIP procedure
 
-Follow `vendor/knuth/tripman.tex`, Appendix A, in order. The paths below name a
-future *qualified* Web2C build. `reference_trip.py` exercises this sequence on
-the candidate; it deliberately leaves qualification pending.
+Follow `vendor/knuth/tripman.tex`, Appendix A, in order. `reference_trip.py`
+executes this sequence and validates the documented profile allowances.
 
 1. In each isolated fixture directory, run `pltotf trip.pl trip.tfm`, then
    `tftopl trip.tfm tmp.pl`; compare tmp.pl with the supplied trip.pl, investigating
@@ -108,21 +125,20 @@ the candidate; it deliberately leaves qualification pending.
    Compare trip.log, trip.dvi, tripos.tex, empty 8terminal.tex and terminal
    capture trip.fot against the official outputs. Do the equivalent Rust run
    using its independently constructed format.
-5. Compare logs under Appendix A step 5's allowances: dates/file names;
-   narrowly identified glue-set and accent-kern rounding; actually differing
-   capacities; help messages; string statistics; memory statistics. No allowance
-   is automatically applied here. Each future normalization needs an explicit
-   rationale and tests proving it cannot conceal a typesetting difference.
+5. Compare logs under Appendix A step 5's allowances: banners/relative file
+   prefixes; narrowly identified glue-set rounding on the eight documented
+   `\vbox` lines; actually differing Web2C capacity floors and string
+   statistics; and the reference-only Web2C duplicate-hyphenation adaptation
+   (while keeping pristine §940 authoritative for Webloom). Dates match
+   `1776-07-04 12:00` literally via `scripts/reference-clock.ch`.
 6. Run `dvitype -output-level=2 '-page-start=*.*.*.*.*.*.*.*.*.*' -max-pages=1000000
-   -dpi=72.27 -magnification=0 trip.dvi` (verify flags against the pinned
-   utility). Compare with trip.typ per Appendix A step 6. Compare raw DVI bytes
-   when clocks/comments/font metadata and all other affecting inputs are
-   controlled. Retain the raw byte diff even if the official manual permits
-   semantically equivalent movement commands or narrow rounding differences.
+   -dpi=72.27 -magnification=0 trip.dvi`. Compare with trip.typ per Appendix A
+   step 6. Verify that raw DVI bytes match everywhere except the two
+   glue-rounded 4-byte vertical movement operands (`down4` at 1121 and `y4` at
+   2535), retaining the raw byte diff.
 
 TRIP is a major gate, not proof of all behavior. Continue focused subsystem
-tests independently. The next allocator milestone's acceptance criteria are
-listed in web-map.md.
+tests independently.
 
 ## Run record
 
@@ -151,16 +167,18 @@ reference build qualification, and format interchange is outside the contract.
 
 ### 2026-11-14 implementation checkpoint
 
-- Rust 1.85.0 and stable 1.100.0: 26 tests passed in each of debug and release;
+- Rust 1.85.0 and stable: 35 tests passed in each of debug and release;
   no ignored tests. Formatting and Clippy (`--all-targets -- -D warnings`) pass.
-- Source hashes and 36 WEB anchors pass; the coverage ledger accounts for
+- Source hashes and 92 WEB anchors pass; the coverage ledger accounts for
   all 55 parts and 1,380 sections.
-- Four Python capture tests pass: exact binary I/O/nonzero exit capture,
-  timeout retention, generated-file size limits, and raw diff offsets.
-- The pinned reference candidate builds in two separate directories with
-  identical hashes for six executables and six generated source artifacts.
-- Reference-only TRIP capture produces 16 pages and a 2,920-byte DVI file.
-  Font round trip and tripos.tex are identical; 8terminal.tex is empty. Raw
-  log/terminal/DVI differences are retained and described in reference.md.
+- Six Python capture and qualification tests pass: exact binary I/O/nonzero exit
+  capture, timeout retention, generated-file size limits, raw diff offsets,
+  candidate build verification, and narrow Appendix A allowance validation
+  (including rejection of date drift, box-dimension drift, memory-usage drift,
+  and DVI byte tampering).
+- The pinned reference profile (`webloom-classic-reference-v1`) builds in two
+  separate directories with identical hashes for six executables and six
+  generated source artifacts, and passes the two-build TRIP qualification gate
+  with clock-perturbation invariance verified.
 - Webloom still cannot typeset, initialize formats, or run TRIP. No whole-engine
-  compatibility or fully qualified differential reference is claimed.
+  compatibility is claimed.

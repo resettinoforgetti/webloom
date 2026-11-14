@@ -6,17 +6,20 @@ with format loading, DVI output, and reproducible, documented TRIP results.
 
 ## Current implementation status
 
-- M1: CI and full source coverage ledger implemented. Reference qualification
-  remains a separate gate; installed TeX and upstream test success alone are
-  not proof of the required profile.
+- M1: CI, full source coverage ledger, and the pinned reference build/TRIP
+  qualification gate (`webloom-classic-reference-v1`) are implemented; see
+  [reference qualification](reference.md).
 - M2: variable-size allocation implemented and tested against an independent
   interval model; see [the verified WEB map](web-map.md).
-- M3–M9: not implemented. The CLI still rejects typesetting, INITEX, and formats.
+- M3: host byte streams, file lookup, clocks, character translation, line
+  buffers, string pool (`TEX.POOL`), printing, error reporting, interaction
+  modes, and Part 29 file-name/transcript routines are implemented; token-driven
+  `scan_file_name` (`§526`) and `show_context`/`get_token` callbacks connect in M4.
+- M4–M9: not implemented. The CLI still rejects typesetting, INITEX, and formats.
 
-M2 can be verified independently with source-derived tests while reference
-qualification is pending. No later integration or compatibility gate is passed
-by this work. A milestone is complete only when its stated acceptance checks
-pass; a declared owner in [coverage.md](coverage.md) is not implementation proof.
+No later integration or whole-engine compatibility gate is passed by M1–M3. A
+milestone is complete only when its stated acceptance checks pass; a declared
+owner in [coverage.md](coverage.md) is not implementation proof.
 
 ## Milestones and exit criteria
 

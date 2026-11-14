@@ -11,10 +11,12 @@ pub enum PreconditionError {
     FractionDomain,
     IntermediateRange,
     NegativeBadnessAmount,
+    DecimalDigits,
 }
 
 impl Scaled {
     pub const UNITY: Self = Self(65536);
+    pub const TWO: i32 = 131072;
     pub const ZERO: Self = Self(0);
 
     pub fn new(value: i32) -> Result<Self, PreconditionError> {
@@ -28,6 +30,31 @@ impl Scaled {
     pub const fn raw(self) -> i32 {
         self.0
     }
+}
+
+/// §100: half of an integer with unambiguous odd-number rounding upward.
+pub fn half(x: i32) -> Result<i32, PreconditionError> {
+    Scaled::new(x)?;
+    if x == i32::MAX {
+        return Err(PreconditionError::IntermediateRange);
+    }
+    if x % 2 != 0 {
+        Ok((x + 1) / 2)
+    } else {
+        Ok(x / 2)
+    }
+}
+
+/// §102: convert a decimal fraction (.d_0 ... d_{k-1}), 0 <= k <= 17, to Scaled.
+pub fn round_decimals(digits: &[u8]) -> Result<Scaled, PreconditionError> {
+    if digits.len() > 17 || digits.iter().any(|&d| d > 9) {
+        return Err(PreconditionError::DecimalDigits);
+    }
+    let mut a = 0_i32;
+    for &d in digits.iter().rev() {
+        a = (a + i32::from(d) * Scaled::TWO) / 10;
+    }
+    Scaled::new((a + 1) / 2)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

@@ -1,4 +1,5 @@
-use webloom::arithmetic::{Arithmetic, PreconditionError, Scaled, badness};
+use webloom::arithmetic::{Arithmetic, PreconditionError, Scaled, badness, half, round_decimals};
+use webloom::io::{HostFixture, IoConfig, IoState, Selector};
 
 fn s(x: i32) -> Scaled {
     Scaled::new(x).unwrap()
@@ -193,5 +194,72 @@ fn badness_exact_vectors_and_all_reachable_cube_roundings() {
         let floor = cube / 262144;
         let rounded = floor + i64::from(cube % 262144 >= 131072);
         assert_eq!(i64::from(badness(s(r), s(297)).unwrap()), rounded);
+    }
+}
+
+#[test]
+fn half_rounds_odd_integers_upward_and_checks_bounds() {
+    assert_eq!(half(i32::MIN), Err(PreconditionError::IntegerRange));
+    assert_eq!(half(i32::MAX), Err(PreconditionError::IntermediateRange));
+    for (input, expected) in [
+        (-i32::MAX, -1073741823),
+        (-4, -2),
+        (-3, -1),
+        (-2, -1),
+        (-1, 0),
+        (0, 0),
+        (1, 1),
+        (2, 1),
+        (3, 2),
+        (4, 2),
+        (i32::MAX - 1, 1073741823),
+    ] {
+        assert_eq!(half(input).unwrap(), expected, "x={input}");
+    }
+}
+
+#[test]
+fn round_decimals_and_print_scaled_round_trip_all_fractions() {
+    assert_eq!(round_decimals(&[]).unwrap(), Scaled::ZERO);
+    assert_eq!(round_decimals(&[5]).unwrap(), s(32768));
+    assert_eq!(round_decimals(&[9; 17]).unwrap(), Scaled::UNITY);
+    assert_eq!(
+        round_decimals(&[0; 18]),
+        Err(PreconditionError::DecimalDigits)
+    );
+    assert_eq!(
+        round_decimals(&[1, 10]),
+        Err(PreconditionError::DecimalDigits)
+    );
+
+    let mut io = IoState::new(IoConfig::default(), HostFixture::default()).unwrap();
+    io.selector = Selector::TermOnly;
+    for frac in 0..=65536_i32 {
+        io.host.term_out.clear();
+        io.term_offset = 0;
+        io.print_scaled(s(frac));
+        let printed = String::from_utf8(io.host.term_out.clone()).unwrap();
+        let (int_part, dec_part) = printed.split_once('.').unwrap();
+        assert!(!dec_part.is_empty());
+        let int_val: i32 = int_part.parse().unwrap();
+        let digits: Vec<u8> = dec_part.bytes().map(|b| b - b'0').collect();
+        let reconstructed = int_val * 65536 + round_decimals(&digits).unwrap().raw();
+        assert_eq!(reconstructed, frac, "printed={printed}");
+    }
+    for (val, text) in [
+        (0, "0.0"),
+        (1, "0.00002"),
+        (-1, "-0.00002"),
+        (32768, "0.5"),
+        (-32768, "-0.5"),
+        (65536, "1.0"),
+        (-65536, "-1.0"),
+        (1073741823, "16383.99998"),
+        (-1073741823, "-16383.99998"),
+    ] {
+        io.host.term_out.clear();
+        io.term_offset = 0;
+        io.print_scaled(s(val));
+        assert_eq!(String::from_utf8_lossy(&io.host.term_out), text);
     }
 }

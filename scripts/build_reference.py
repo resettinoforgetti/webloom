@@ -21,10 +21,36 @@ def output(command, cwd, env):
     return subprocess.check_output(command, cwd=cwd, env=env, text=True).strip()
 
 
+def verify_candidate(build):
+    """Reject stale profiles or changed executables/generated sources before use."""
+    build = Path(build).resolve()
+    lock = json.loads(LOCK.read_text())
+    report = json.loads((build / "webloom-build.json").read_text())
+    if report.get("status") != "built_candidate" or report.get("lock") != lock:
+        raise ValueError("A successful build of the current locked reference profile is required")
+    changes = {item["path"]: item["sha256"] for item in lock["local_changes"]}
+    if report.get("local_change_sha256") != changes:
+        raise ValueError("Build report does not contain the locked local change chain")
+    for name, expected in changes.items():
+        if digest(ROOT / name) != expected:
+            raise ValueError(f"Local reference change checksum mismatch: {name}")
+    required = {
+        "binary_sha256": {"tex", "tangle", "tie", "dvitype", "pltotf", "tftopl"},
+        "generated_sha256": {"tex-final.ch", "tex.p", "tex.pool", "tex0.c", "texini.c", "texd.h"},
+    }
+    for field, names in required.items():
+        if set(report.get(field, {})) != names:
+            raise ValueError(f"Incomplete reference artifact manifest: {field}")
+        for name, expected in report[field].items():
+            if digest(build / "texk/web2c" / name) != expected:
+                raise ValueError(f"Built reference artifact changed: {name}")
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=ROOT / "target/reference-source")
-    parser.add_argument("--build", type=Path, default=ROOT / "target/reference-build")
+    parser.add_argument("--build", type=Path, default=ROOT / "target/reference-build-v1")
     parser.add_argument("--jobs", type=int, default=2)
     args = parser.parse_args()
     if args.jobs < 1:
@@ -33,6 +59,12 @@ def main():
     if source == build or source in build.parents or build in source.parents:
         parser.error("source and build must be separate, non-nested directories")
     lock = json.loads(LOCK.read_text())
+    local_changes = []
+    for change in lock["local_changes"]:
+        path = ROOT / change["path"]
+        if digest(path) != change["sha256"]:
+            raise SystemExit(f"Local reference change checksum mismatch: {path}")
+        local_changes.append(path)
     env = dict(os.environ, LC_ALL="C", TZ="UTC", SOURCE_DATE_EPOCH=lock["source_date_epoch"])
     if not source.exists():
         source.mkdir(parents=True)
@@ -65,12 +97,19 @@ def main():
     if identity_file.exists() and json.loads(identity_file.read_text()) != identity:
         raise SystemExit("Build directory belongs to different inputs; use a fresh --build directory.")
     identity_file.write_text(json.dumps(identity, indent=2) + "\n")
-    commands = [[str(source / "configure"), *lock["configure"]], ["make", f"-j{args.jobs}"]]
+    tex_sources = [source / "texk/web2c/tex.web"]
+    tex_sources += [source / "texk/web2c" / name for name in lock["change_chain"]]
+    tex_sources += local_changes
+    # GNU make propagates command-line assignments to recursive builds. TIE
+    # receives the original chain followed by our checked local clock change.
+    chain_argument = "tex_ch_srcs=" + " ".join(str(path) for path in tex_sources)
+    commands = [[str(source / "configure"), *lock["configure"]], ["make", f"-j{args.jobs}", chain_argument]]
     evidence = {
         "status": "building", "qualified": False, "lock": lock, "commands": commands,
         "environment": {key: env[key] for key in ("LC_ALL", "TZ", "SOURCE_DATE_EPOCH")},
         "tool_versions": {tool: output([tool, "--version"], build, env) for tool in ("gcc", "g++", "make", "ld", "git")},
         "change_chain_sha256": {name: digest(source / "texk/web2c" / name) for name in lock["change_chain"]},
+        "local_change_sha256": {str(path.relative_to(ROOT)): digest(path) for path in local_changes},
     }
     report = build / "webloom-build.json"
     report.write_text(json.dumps(evidence, indent=2) + "\n")
