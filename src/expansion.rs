@@ -417,14 +417,11 @@ impl Engine {
                                     + self.eqtb.layout.frozen_dont_expand as u16,
                             )
                             .unwrap();
-                        self.memory.set_link(p, MemPtr::NULL).unwrap();
-                        self.scanner.ins_list(
-                            &mut self.io,
-                            &mut self.eqtb,
-                            &mut self.hash,
-                            &mut self.memory,
-                            p,
-                        )?;
+                        self.memory
+                            .set_link(p, MemPtr::from_address(self.io.cur_input.loc_field as u16))
+                            .unwrap();
+                        self.io.cur_input.start_field = usize::from(p.address());
+                        self.io.cur_input.loc_field = usize::from(p.address());
                     }
                 }
                 cmd::CS_NAME => {
@@ -468,13 +465,16 @@ impl Engine {
                                 self.io.buffer[j + idx] = b;
                             }
                         }
-                        self.hash.id_lookup(
+                        self.hash.no_new_control_sequence = false;
+                        let cs = self.hash.id_lookup(
                             &mut self.io,
                             &self.eqtb.layout,
                             j,
                             bytes.len(),
                             &mut crate::io::NoopErrorHooks,
-                        )?
+                        )?;
+                        self.hash.no_new_control_sequence = true;
+                        cs
                     };
                     if self.eqtb.eq_type(usize::from(cs)) == cmd::UNDEFINED_CS {
                         self.save_stack.eq_define(

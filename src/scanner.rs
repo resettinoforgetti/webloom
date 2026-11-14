@@ -1132,7 +1132,8 @@ impl Scanner {
                             cmd::RIGHT_BRACE => io.align_state -= 1,
                             cmd::OUT_PARAM => {
                                 // §359: Insert macro parameter and goto restart.
-                                let param_idx = io.cur_input.limit_field + (io.cur_chr as usize);
+                                let param_idx =
+                                    io.cur_input.limit_field + (io.cur_chr as usize) - 1;
                                 let param_list = self.param_stack[param_idx];
                                 self.begin_token_list(
                                     io, eqtb, hash, memory, param_list, PARAMETER,

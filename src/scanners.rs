@@ -774,6 +774,11 @@ impl Engine {
                     self.expand()?;
                     continue;
                 }
+                self.io.cur_tok = if self.scanner.cur_cs == 0 {
+                    (i32::from(self.io.cur_cmd) << 8) + self.io.cur_chr
+                } else {
+                    i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs)
+                };
             } else {
                 self.get_token()?;
             }
@@ -794,7 +799,7 @@ impl Engine {
                 } else if self.io.cur_tok > i32::from(ZERO_TOKEN)
                     && self.io.cur_tok <= i32::from(ZERO_TOKEN) + i32::from(t)
                 {
-                    let param_idx = (self.io.cur_tok - i32::from(ZERO_TOKEN) - 1) as u16;
+                    let param_idx = (self.io.cur_tok - i32::from(ZERO_TOKEN)) as u16;
                     let q = self.memory.get_avail()?;
                     self.memory
                         .set_info(q, OUT_PARAM_TOKEN + param_idx)
