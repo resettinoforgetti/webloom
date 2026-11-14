@@ -139,6 +139,12 @@ pub enum Termination {
     FinalEnd,
 }
 
+impl From<crate::memory::MemoryError> for Termination {
+    fn from(_: crate::memory::MemoryError) -> Self {
+        Self::JumpOut
+    }
+}
+
 /// §§11–14, 111, 290, 522: Capacity parameters and consistency checks for I/O, strings, and tables.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IoConfig {

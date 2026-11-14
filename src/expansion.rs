@@ -348,4 +348,514 @@ impl Engine {
         self.memory.flush_list(current).unwrap();
         Ok(())
     }
+
+    /// §§366–378: Expand the current expandable token (`cur_cmd > MAX_COMMAND`).
+    pub fn expand(&mut self) -> Result<(), Termination> {
+        let t: i32;
+        let mut p: MemPtr;
+        let cur_cmd = self.io.cur_cmd;
+        if cur_cmd < cmd::CALL {
+            match cur_cmd {
+                cmd::TOP_BOT_MARK => {
+                    let idx = self.io.cur_chr as usize;
+                    if idx < self.scanner.cur_mark.len() {
+                        let mark = self.scanner.cur_mark[idx];
+                        if mark != MemPtr::NULL {
+                            self.scanner.begin_token_list(
+                                &mut self.io,
+                                &mut self.eqtb,
+                                &mut self.hash,
+                                &mut self.memory,
+                                mark,
+                                crate::scanner::MARK_TEXT,
+                            )?;
+                        }
+                    }
+                }
+                cmd::EXPAND_AFTER => {
+                    // §§367–368
+                    self.get_token()?;
+                    t = self.io.cur_tok;
+                    self.get_token()?;
+                    if self.io.cur_cmd > cmd::MAX_COMMAND {
+                        self.expand()?;
+                    } else {
+                        self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                    }
+                    self.io.cur_tok = t;
+                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                }
+                cmd::NO_EXPAND => {
+                    // §369
+                    let save_scanner_status = self.scanner.scanner_status;
+                    self.scanner.scanner_status = ScannerStatus::Normal;
+                    self.get_token()?;
+                    self.scanner.scanner_status = save_scanner_status;
+                    t = self.io.cur_tok;
+                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                    if t >= i32::from(crate::tables::CS_TOKEN_FLAG) {
+                        p = self.memory.get_avail()?;
+                        self.memory
+                            .set_info(
+                                p,
+                                crate::tables::CS_TOKEN_FLAG
+                                    + self.eqtb.layout.frozen_dont_expand as u16,
+                            )
+                            .unwrap();
+                        self.memory.set_link(p, MemPtr::NULL).unwrap();
+                        self.scanner.ins_list(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory, p)?;
+                    }
+                }
+                cmd::CS_NAME => {
+                    // §§372–373
+                    let r = self.memory.get_avail()?;
+                    p = r;
+                    loop {
+                        self.get_x_token()?;
+                        if self.scanner.cur_cs != 0 {
+                            break;
+                        }
+                        let q = self.memory.get_avail()?;
+                        self.memory.set_info(q, self.io.cur_tok as u16).unwrap();
+                        self.memory.set_link(p, q).unwrap();
+                        p = q;
+                    }
+                    if self.io.cur_cmd != cmd::END_CS_NAME {
+                        self.io.print_err(pool_str("Missing \\endcsname inserted"));
+                        self.scanner.back_error(
+                            &mut self.io,
+                            &mut self.eqtb,
+                            &mut self.hash,
+                            &mut self.memory,
+                        )?;
+                    }
+                    // Build string from collected character tokens
+                    let mut bytes = Vec::new();
+                    let mut q = self.memory.link(r).unwrap_or(MemPtr::NULL);
+                    while q != MemPtr::NULL {
+                        let info = self.memory.info(q).unwrap_or(0);
+                        bytes.push((info & 0xFF) as u8);
+                        q = self.memory.link(q).unwrap_or(MemPtr::NULL);
+                    }
+                    self.memory.flush_list(r).unwrap();
+                    let cs = if bytes.is_empty() {
+                        self.eqtb.layout.null_cs as u16
+                    } else {
+                        let j = self.io.first;
+                        for (idx, &b) in bytes.iter().enumerate() {
+                            if j + idx < self.io.buffer.len() {
+                                self.io.buffer[j + idx] = b;
+                            }
+                        }
+                        self.hash.id_lookup(
+                            &mut self.io,
+                            &self.eqtb.layout,
+                            j,
+                            bytes.len(),
+                            &mut crate::io::NoopErrorHooks,
+                        )?
+                    };
+                    if self.eqtb.eq_type(usize::from(cs)) == cmd::UNDEFINED_CS {
+                        self.save_stack.eq_define(
+                            &mut self.io,
+                            &mut self.eqtb,
+                            &mut self.memory,
+                            usize::from(cs),
+                            cmd::RELAX,
+                            256,
+                            &mut crate::io::NoopErrorHooks,
+                        )?;
+                    }
+                    self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(cs);
+                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                }
+                cmd::CONVERT => {
+                    self.conv_toks()?;
+                }
+                cmd::THE => {
+                    self.ins_the_toks()?;
+                }
+                cmd::IF_TEST => {
+                    self.conditional()?;
+                }
+                cmd::FI_OR_ELSE => {
+                    self.fi_or_else()?;
+                }
+                _ => {
+                    self.io.print_err(pool_str("Undefined control sequence"));
+                    self.error()?;
+                }
+            }
+        } else if cur_cmd < cmd::END_TEMPLATE {
+            self.macro_call()?;
+        } else {
+            // END_TEMPLATE
+            self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG)
+                + self.eqtb.layout.frozen_endv as i32;
+            self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+        }
+        Ok(())
+    }
+
+    /// §380: Get the next non-expandable token.
+    pub fn get_x_token(&mut self) -> Result<(), Termination> {
+        loop {
+            self.get_next()?;
+            if self.io.cur_cmd <= cmd::MAX_COMMAND {
+                break;
+            }
+            self.expand()?;
+        }
+        if self.scanner.cur_cs == 0 {
+            self.io.cur_tok = i32::from(self.io.cur_cmd) * 256 + self.io.cur_chr;
+        } else {
+            self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
+        }
+        Ok(())
+    }
+
+    /// §381: Like `get_x_token`, but only expands if `cur_cmd > MAX_COMMAND`.
+    pub fn x_token(&mut self) -> Result<(), Termination> {
+        while self.io.cur_cmd > cmd::MAX_COMMAND {
+            self.expand()?;
+            self.get_next()?;
+        }
+        if self.scanner.cur_cs == 0 {
+            self.io.cur_tok = i32::from(self.io.cur_cmd) * 256 + self.io.cur_chr;
+        } else {
+            self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
+        }
+        Ok(())
+    }
+
+    /// §§470–472: `\number`, `\romannumeral`, `\string`, `\meaning`, `\fontname`, `\jobname`.
+    pub fn conv_toks(&mut self) -> Result<(), Termination> {
+        let c = self.io.cur_chr as u16;
+        let mut text = String::new();
+        match c {
+            crate::tables::NUMBER_CODE => {
+                self.scan_int()?;
+                text = self.scanner.cur_val.to_string();
+            }
+            crate::tables::ROMAN_NUMERAL_CODE => {
+                self.scan_int()?;
+                text = to_roman_numeral(self.scanner.cur_val);
+            }
+            crate::tables::STRING_CODE => {
+                let save_status = self.scanner.scanner_status;
+                self.scanner.scanner_status = ScannerStatus::Normal;
+                self.get_token()?;
+                self.scanner.scanner_status = save_status;
+                if self.scanner.cur_cs == 0 {
+                    text.push((self.io.cur_chr as u8) as char);
+                } else {
+                    let esc = self.eqtb.int_par(crate::tables::ESCAPE_CHAR_CODE);
+                    if (0..=255).contains(&esc) {
+                        text.push((esc as u8) as char);
+                    }
+                    let cs_str = self.hash.text(usize::from(self.scanner.cur_cs));
+                    if cs_str != StrNum::ZERO {
+                        text.push_str(&String::from_utf8_lossy(self.io.str_bytes(cs_str)));
+                    }
+                }
+            }
+            crate::tables::MEANING_CODE => {
+                let save_status = self.scanner.scanner_status;
+                self.scanner.scanner_status = ScannerStatus::Normal;
+                self.get_token()?;
+                self.scanner.scanner_status = save_status;
+                if self.scanner.cur_cs == 0 {
+                    text = format!("character {}", self.io.cur_chr as u8 as char);
+                } else if self.io.cur_cmd >= cmd::CALL {
+                    text = "macro:".to_string();
+                } else {
+                    text = format!("primitive({})", self.io.cur_cmd);
+                }
+            }
+            crate::tables::FONT_NAME_CODE => {
+                text = "nullfont".to_string();
+            }
+            crate::tables::JOB_NAME_CODE => {
+                if self.io.job_name != StrNum::ZERO {
+                    text = String::from_utf8_lossy(self.io.str_bytes(self.io.job_name)).into_owned();
+                } else {
+                    text = "texput".to_string();
+                }
+            }
+            _ => {}
+        }
+
+        let head = self.memory.temp_head();
+        self.memory.set_head_link(head, MemPtr::NULL).unwrap();
+        let mut tail = head;
+        for &b in text.as_bytes() {
+            let q = self.memory.get_avail()?;
+            let tok = if b == b' ' {
+                SPACE_TOKEN
+            } else {
+                cmd::OTHER_CHAR as u16 * 256 + u16::from(b)
+            };
+            self.memory.set_info(q, tok).unwrap();
+            self.memory.set_link(tail, q).unwrap();
+            tail = q;
+        }
+        let first = self.memory.link(head).unwrap_or(MemPtr::NULL);
+        if first != MemPtr::NULL {
+            self.scanner.ins_list(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory, first)?;
+        }
+        Ok(())
+    }
+
+    /// §495: Push conditional state onto `cond_ptr` stack.
+    fn push_cond(&mut self) -> Result<(), Termination> {
+        let crate::memory::NodeAllocation::Allocated(p) =
+            self.memory.get_node(i32::from(2))?
+        else {
+            return Err(Termination::JumpOut);
+        };
+        self.memory
+            .set_link(p, self.scanner.cond_ptr)
+            .expect("cond link");
+        let packed = (u16::from(self.scanner.if_limit) << 8) | u16::from(self.scanner.cur_if);
+        self.memory.set_info(p, packed).expect("cond info");
+        self.scanner.cond_ptr = p;
+        self.scanner.cur_if = self.io.cur_chr as u8;
+        self.scanner.if_limit = crate::tables::IF_CODE as u8;
+        self.scanner.if_line = self.io.line;
+        Ok(())
+    }
+
+    /// §496: Pop conditional state from `cond_ptr` stack.
+    fn pop_cond(&mut self) {
+        let p = self.scanner.cond_ptr;
+        if p == MemPtr::NULL {
+            return;
+        }
+        let packed = self.memory.info(p).unwrap_or(0);
+        self.scanner.if_limit = (packed >> 8) as u8;
+        self.scanner.cur_if = (packed & 0xFF) as u8;
+        self.scanner.cond_ptr = self.memory.link(p).unwrap_or(MemPtr::NULL);
+        self.memory.free_node(p, 2).ok();
+    }
+
+    /// §494: Skip tokens until matching `\else`, `\or`, or `\fi` at level 0.
+    pub fn pass_text(&mut self) -> Result<(), Termination> {
+        let save_scanner_status = self.scanner.scanner_status;
+        self.scanner.scanner_status = ScannerStatus::Skipping;
+        let mut l: usize = 0;
+        self.scanner.skip_line = self.io.line;
+        loop {
+            self.get_next()?;
+            if self.io.cur_cmd == cmd::FI_OR_ELSE {
+                if l == 0 {
+                    break;
+                }
+                if self.io.cur_chr == i32::from(crate::tables::FI_CODE) {
+                    l -= 1;
+                }
+            } else if self.io.cur_cmd == cmd::IF_TEST {
+                l += 1;
+            }
+        }
+        self.scanner.scanner_status = save_scanner_status;
+        Ok(())
+    }
+
+    /// §497: Change `if_limit` for a nested or current conditional.
+    pub fn change_if_limit(&mut self, l: u8, p: MemPtr) -> Result<(), Termination> {
+        if p == self.scanner.cond_ptr {
+            self.scanner.if_limit = l;
+        } else {
+            let mut q = self.scanner.cond_ptr;
+            while q != MemPtr::NULL {
+                let next = self.memory.link(q).unwrap_or(MemPtr::NULL);
+                if next == p {
+                    let cur = self.memory.info(q).unwrap_or(0) & 0xFF;
+                    self.memory.set_info(q, (u16::from(l) << 8) | cur).ok();
+                    return Ok(());
+                }
+                q = next;
+            }
+        }
+        Ok(())
+    }
+
+    /// §§498–509: Evaluate `\if...` conditional.
+    pub fn conditional(&mut self) -> Result<(), Termination> {
+        self.push_cond()?;
+        let save_cond_ptr = self.scanner.cond_ptr;
+        let this_if = u16::from(self.scanner.cur_if);
+        let b: bool = match this_if {
+            crate::tables::IF_TRUE_CODE => true,
+            crate::tables::IF_FALSE_CODE => false,
+            crate::tables::IF_ODD_CODE => {
+                self.scan_int()?;
+                (self.scanner.cur_val & 1) != 0
+            }
+            crate::tables::IF_INT_CODE | crate::tables::IF_DIM_CODE => {
+                if this_if == crate::tables::IF_INT_CODE {
+                    self.scan_int()?;
+                } else {
+                    self.scan_dimen(false, false, false)?;
+                }
+                let n = self.scanner.cur_val;
+                self.get_x_token_skip_spaces()?;
+                let r = self.io.cur_tok;
+                if this_if == crate::tables::IF_INT_CODE {
+                    self.scan_int()?;
+                } else {
+                    self.scan_dimen(false, false, false)?;
+                }
+                let m = self.scanner.cur_val;
+                if r == i32::from(cmd::OTHER_CHAR) * 256 + b'<' as i32 {
+                    n < m
+                } else if r == i32::from(cmd::OTHER_CHAR) * 256 + b'=' as i32 {
+                    n == m
+                } else if r == i32::from(cmd::OTHER_CHAR) * 256 + b'>' as i32 {
+                    n > m
+                } else {
+                    self.io.print_err(pool_str("Illegal comparison"));
+                    self.error()?;
+                    false
+                }
+            }
+            crate::tables::IF_CHAR_CODE | crate::tables::IF_CAT_CODE => {
+                self.get_x_token()?;
+                let n = if this_if == crate::tables::IF_CHAR_CODE {
+                    if self.scanner.cur_cs == 0 {
+                        self.io.cur_chr
+                    } else {
+                        256
+                    }
+                } else if self.scanner.cur_cs == 0 {
+                    i32::from(self.io.cur_cmd)
+                } else {
+                    16
+                };
+                self.get_x_token()?;
+                let m = if this_if == crate::tables::IF_CHAR_CODE {
+                    if self.scanner.cur_cs == 0 {
+                        self.io.cur_chr
+                    } else {
+                        256
+                    }
+                } else if self.scanner.cur_cs == 0 {
+                    i32::from(self.io.cur_cmd)
+                } else {
+                    16
+                };
+                n == m
+            }
+            crate::tables::IFX_CODE => {
+                let save_status = self.scanner.scanner_status;
+                self.scanner.scanner_status = ScannerStatus::Normal;
+                self.get_next()?;
+                let n = self.io.cur_cmd;
+                let p = self.io.cur_chr;
+                self.get_next()?;
+                self.scanner.scanner_status = save_status;
+                if n != self.io.cur_cmd {
+                    false
+                } else if n < cmd::CALL {
+                    p == self.io.cur_chr
+                } else {
+                    p == self.io.cur_chr
+                }
+            }
+            crate::tables::IF_CASE_CODE => {
+                self.scan_int()?;
+                let mut n = self.scanner.cur_val;
+                while n != 0 {
+                    self.pass_text()?;
+                    if self.scanner.cond_ptr == save_cond_ptr {
+                        if self.io.cur_chr == i32::from(crate::tables::OR_CODE) {
+                            n -= 1;
+                        } else {
+                            if self.io.cur_chr == i32::from(crate::tables::FI_CODE) {
+                                self.pop_cond();
+                            } else {
+                                self.scanner.if_limit = crate::tables::FI_CODE as u8;
+                            }
+                            return Ok(());
+                        }
+                    } else if self.io.cur_chr == i32::from(crate::tables::FI_CODE) {
+                        self.pop_cond();
+                    }
+                }
+                self.change_if_limit(crate::tables::OR_CODE as u8, save_cond_ptr)?;
+                return Ok(());
+            }
+            _ => false,
+        };
+
+        if b {
+            self.change_if_limit(crate::tables::ELSE_CODE as u8, save_cond_ptr)?;
+            return Ok(());
+        }
+
+        // False branch: skip to \else or \fi
+        loop {
+            self.pass_text()?;
+            if self.scanner.cond_ptr == save_cond_ptr {
+                if self.io.cur_chr != i32::from(crate::tables::OR_CODE) {
+                    break;
+                }
+            } else if self.io.cur_chr == i32::from(crate::tables::FI_CODE) {
+                self.pop_cond();
+            }
+        }
+        if self.io.cur_chr == i32::from(crate::tables::FI_CODE) {
+            self.pop_cond();
+        } else {
+            self.scanner.if_limit = crate::tables::FI_CODE as u8;
+        }
+        Ok(())
+    }
+
+    /// §510: Handle `\else`, `\or`, `\fi` encountered during normal expansion.
+    pub fn fi_or_else(&mut self) -> Result<(), Termination> {
+        if self.io.cur_chr > i32::from(self.scanner.if_limit) {
+            if self.scanner.if_limit == crate::tables::IF_CODE as u8 {
+                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                return Ok(());
+            }
+            self.io.print_err(pool_str("Extra "));
+            self.error()?;
+            return Ok(());
+        }
+        while self.io.cur_chr != i32::from(crate::tables::FI_CODE) {
+            self.pass_text()?;
+        }
+        self.pop_cond();
+        Ok(())
+    }
+}
+
+fn to_roman_numeral(mut n: i32) -> String {
+    if n <= 0 {
+        return String::new();
+    }
+    let table = [
+        (1000, "m"),
+        (900, "cm"),
+        (500, "d"),
+        (400, "cd"),
+        (100, "c"),
+        (90, "xc"),
+        (50, "l"),
+        (40, "xl"),
+        (10, "x"),
+        (9, "ix"),
+        (5, "v"),
+        (4, "iv"),
+        (1, "i"),
+    ];
+    let mut out = String::new();
+    for &(val, sym) in &table {
+        while n >= val {
+            out.push_str(sym);
+            n -= val;
+        }
+    }
+    out
 }

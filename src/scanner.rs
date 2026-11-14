@@ -64,6 +64,13 @@ pub struct Scanner {
     pub cur_if: u8,
     pub skip_line: i32,
     pub cur_mark: [MemPtr; 5],
+    pub cond_ptr: MemPtr,
+    pub if_limit: u8,
+    pub if_line: i32,
+    pub cur_val: i32,
+    pub cur_val_level: u16,
+    pub radix: u8,
+    pub cur_order: u8,
 }
 
 impl Scanner {
@@ -95,6 +102,13 @@ impl Scanner {
             cur_if: 0,
             skip_line: 0,
             cur_mark: [MemPtr::NULL; 5],
+            cond_ptr: MemPtr::NULL,
+            if_limit: 0,
+            if_line: 0,
+            cur_val: 0,
+            cur_val_level: 0,
+            radix: 0,
+            cur_order: 0,
         }
     }
 
