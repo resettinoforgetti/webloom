@@ -43,7 +43,7 @@ floating-point determinism claim is made.
 
 ## Memory
 
-**S/P** §§110–124,162–164: quarterword 0..255, halfword 0..65535, null=0,
+**S/P** §§110–130,162–164: quarterword 0..255, halfword 0..65535, null=0,
 empty_flag=65535. Default mem_min=mem_bot=0, mem_top=mem_max=30000.
 Configurable mem_bot is 0 or 1 (the latter supports the eventual TRIP profile),
 mem_top>=mem_bot+1100 and mem_top<=mem_max<65535. Production-style extension
@@ -63,13 +63,42 @@ the old avail to the tail, preserving list order; null is a no-op. Lists must
 be finite, null-terminated, and contain only currently allocated dynamic nodes.
 Statistics follow the source's stat variant: dyn_used starts at 14.
 
+`get_node` (§§125–129) takes a signed source integer. Values below two are
+invalid API inputs; all other positive requests retain source semantics,
+including capacity exhaustion for unfulfillable large requests. The distinguished
+2^30 request coalesces the ring, returns `Coalesced`, and never grows low memory,
+allocates a node, or exhausts a running allocator. It can move rover while merging.
+Ordinary allocation clears only the returned head's link; other payload words
+are retained and must be initialized by their semantic caller.
+
+Free blocks are at least two words. Allocation merges physically adjacent free
+successors, splits from the high end only if at least two words remain, and
+removes an exact-fit block only if another ring member exists. A one-word
+remainder is unusable. §126 growth uses the nonnegative frontier difference:
+1000 words when the difference is >=1998, otherwise 1 + difference/2. Growth
+inserts the old low sentinel before rover and makes it rover; the new low
+sentinel has zero info/link. The high frontier is unchanged by low exhaustion.
+
+`free_node` (§130) inserts immediately before rover without eager coalescing.
+`var_used` starts at 20 and changes by the allocated/reclaimed size. Single-word
+and variable-size statistics remain independent even though they share capacity.
+`sort_avail` (§§131–132) and format serialization remain unavailable.
+
+**P** checked reclamation requires an allocated block head and its exact size.
+Invalid sizes, interior/free/reserved addresses, wrong-kind frees, size mismatch,
+and double reclamation are rejected before mutation. `flush_list` validates every
+node as single-word, including when a valid head links to a variable block.
+These errors do not stop the allocator. Capacity exhaustion is terminal for both
+allocation kinds: even later merge-only requests and reclamation fail unchanged.
+
 **U/P** WEB does not initialize info in virgin dynamic words. Rust zero-fills
 the backing array so every read is memory-safe; this does not establish that
 source callers may rely on a virgin info value of zero. Callers must initialize
 payloads before semantic use. Recycled info is preserved and tested. MemPtr is
 an index, not an ownership capability: callers must use the originating Memory
-and stop using a node after reclamation. The live bitmap catches currently free
-addresses, but intentionally does not add generations or change address reuse.
+and stop using a node after reclamation. Allocation metadata catches currently
+free/interior addresses and wrong allocation kinds, but intentionally does not
+add generations or change address reuse.
 
 **P** memory word bits: lh=bits31..16, rh=15..0, b0=31..24, b1=23..16,
 b2=15..8, b3=7..0. Integer/scaled views share all bits. One backing integer

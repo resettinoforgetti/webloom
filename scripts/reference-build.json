@@ -1,0 +1,25 @@
+{
+  "repository": "https://github.com/TeX-Live/texlive-source.git",
+  "revision": "dce038dd1bd98fac739254da4a2066c8347cdf6c",
+  "source_date_epoch": "1794516452",
+  "tex_web_sha256": "c62ab513ef167e93f71a23bd34f311e243210afd7c7a0f9b779614b71e398324",
+  "source_directories": ["am", "auxdir", "build-aux", "m4", "doc", "utils", "libs/zlib", "texk/kpathsea", "texk/ptexenc", "texk/web2c"],
+  "configure": [
+    "--disable-all-pkgs", "--enable-web2c", "--enable-tex", "--enable-web-progs",
+    "--disable-mf", "--disable-mflua", "--disable-mfluajit", "--disable-mp",
+    "--disable-pmp", "--disable-upmp", "--disable-texprof", "--disable-etex",
+    "--disable-uptex", "--disable-euptex", "--disable-aleph", "--disable-hitex",
+    "--disable-pdftex", "--disable-luatex", "--disable-luajittex",
+    "--disable-luahbtex", "--disable-luajithbtex", "--disable-xetex",
+    "--disable-synctex", "--disable-native-texlive-build",
+    "--without-system-kpathsea", "--without-system-ptexenc",
+    "--disable-shared", "--without-x", "--disable-mktexfmt-default",
+    "--disable-mktextfm-default", "--disable-mktextex-default",
+    "--disable-mktexpk-default", "--disable-mktexmf-default",
+    "CFLAGS=-O2 -g0", "CXXFLAGS=-O2 -g0"
+  ],
+  "change_chain": [
+    "tex.ch", "enctexdir/enctex1.ch", "enctexdir/enctex-tex.ch",
+    "enctexdir/enctex2.ch", "tex-binpool.ch"
+  ]
+}
