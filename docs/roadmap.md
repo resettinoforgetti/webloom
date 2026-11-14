@@ -14,8 +14,13 @@ with format loading, DVI output, and reproducible, documented TRIP results.
 - M3: host byte streams, file lookup, clocks, character translation, line
   buffers, string pool (`TEX.POOL`), printing, error reporting, interaction
   modes, and Part 29 file-name/transcript routines are implemented; token-driven
-  `scan_file_name` (`§526`) and `show_context`/`get_token` callbacks connect in M4.
-- M4–M9: not implemented. The CLI still rejects typesetting, INITEX, and formats.
+  `scan_file_name` (`§526`) remains pending in M4.
+- M4: command/equivalent/hash/save tables, primitive registration, semantic nest
+  storage, token lists, input stacks, lexical scanning, live error callbacks,
+  and macro argument matching (`§§387–401`) are implemented as subsystem APIs.
+  Expansion dispatch, basic value scanners, definition scanning, conditionals,
+  and assignment execution remain unfinished. See [the verified map](web-map.md).
+- M5–M9: not implemented. The CLI still rejects typesetting, INITEX, and formats.
 
 No later integration or whole-engine compatibility gate is passed by M1–M3. A
 milestone is complete only when its stated acceptance checks pass; a declared

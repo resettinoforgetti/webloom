@@ -27,6 +27,14 @@ impl Scaled {
         }
     }
 
+    pub const fn from_raw(value: i32) -> Option<Self> {
+        if value == i32::MIN {
+            None
+        } else {
+            Some(Self(value))
+        }
+    }
+
     pub const fn raw(self) -> i32 {
         self.0
     }

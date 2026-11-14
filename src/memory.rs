@@ -1,10 +1,29 @@
 //! Indexed single-word and variable-size memory, Knuth tex.web §§110–130,162–164.
 //! Format preparation/loading are intentionally unavailable.
 
-const GLUE_SPEC_SIZE: u16 = 4; // §150
+use crate::arithmetic::Scaled;
+
+pub const GLUE_SPEC_SIZE: u16 = 4; // §150
 const LOW_STATIC_WORDS: u16 = 5 * GLUE_SPEC_SIZE; // §162
 const INITIAL_FREE_WORDS: u16 = 1000; // §164
 const HIGH_STATIC_WORDS: u16 = 14; // §162
+
+/// §150: Glue stretch/shrink infinity order (`normal..filll`).
+pub const NORMAL_ORDER: u8 = 0;
+pub const FIL_ORDER: u8 = 1;
+pub const FILL_ORDER: u8 = 2;
+pub const FILLL_ORDER: u8 = 3;
+
+/// §§150–151: 4-word glue specification layout (`width`, `stretch`, `shrink`, orders, and `glue_ref_count`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GlueSpec {
+    pub width: Scaled,
+    pub stretch: Scaled,
+    pub shrink: Scaled,
+    pub stretch_order: u8,
+    pub shrink_order: u8,
+    pub ref_count: u16,
+}
 
 /// §125's merge-only request; its result is not a memory address.
 pub const COALESCE_REQUEST: i32 = 1 << 30;
@@ -25,11 +44,15 @@ enum Allocation {
 }
 
 /// A halfword address or null. This is not an eqtb index or an arbitrary flag.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MemPtr(u16);
 
 impl MemPtr {
     pub const NULL: Self = Self(0);
+
+    pub const fn from_address(raw: u16) -> Self {
+        Self(raw)
+    }
 
     pub const fn address(self) -> u16 {
         self.0
@@ -55,14 +78,12 @@ impl Word {
     fn set_link(&mut self, value: u16) {
         self.0 = (self.0 & 0xffff0000) | u32::from(value);
     }
-    #[cfg(test)]
     fn quarters(self) -> [u8; 4] {
         self.0.to_be_bytes()
     }
     fn set_quarters(&mut self, bytes: [u8; 4]) {
         self.0 = u32::from_be_bytes(bytes);
     }
-    #[cfg(test)]
     fn integer(self) -> i32 {
         i32::from_be_bytes(self.0.to_be_bytes())
     }
@@ -456,6 +477,285 @@ impl Memory {
         self.word_mut(tail.0).set_link(avail.0);
         self.state.avail = p;
         Ok(())
+    }
+
+    pub const fn config(&self) -> MemoryConfig {
+        self.config
+    }
+
+    /// §162: Static low-memory glue specification addresses.
+    pub const fn zero_glue(&self) -> MemPtr {
+        MemPtr(self.config.mem_bot)
+    }
+    pub const fn fil_glue(&self) -> MemPtr {
+        MemPtr(self.config.mem_bot + 4)
+    }
+    pub const fn fill_glue(&self) -> MemPtr {
+        MemPtr(self.config.mem_bot + 8)
+    }
+    pub const fn ss_glue(&self) -> MemPtr {
+        MemPtr(self.config.mem_bot + 12)
+    }
+    pub const fn fil_neg_glue(&self) -> MemPtr {
+        MemPtr(self.config.mem_bot + 16)
+    }
+
+    /// §162: Static high-memory list head addresses.
+    pub const fn page_ins_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top)
+    }
+    pub const fn contrib_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 1)
+    }
+    pub const fn page_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 2)
+    }
+    pub const fn temp_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 3)
+    }
+    pub const fn hold_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 4)
+    }
+    pub const fn adjust_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 5)
+    }
+    pub const fn active_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 7)
+    }
+    pub const fn align_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 8)
+    }
+    pub const fn end_span(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 9)
+    }
+    pub const fn omit_template(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 10)
+    }
+    pub const fn null_list(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 11)
+    }
+    pub const fn lig_trick(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 12)
+    }
+    pub const fn garbage(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 12)
+    }
+    pub const fn backup_head(&self) -> MemPtr {
+        MemPtr(self.config.mem_top - 13)
+    }
+
+    fn is_static_high_head(&self, p: MemPtr) -> bool {
+        let hi_min = self.config.mem_top - HIGH_STATIC_WORDS + 1;
+        p.0 >= hi_min && p.0 <= self.config.mem_top
+    }
+
+    /// Read `link(p)` on either a dynamic node or a static high-memory list head (§162).
+    pub fn head_link(&self, p: MemPtr) -> Result<MemPtr, MemoryError> {
+        if self.is_static_high_head(p) {
+            Ok(MemPtr(self.word(p.0).link()))
+        } else {
+            self.link(p)
+        }
+    }
+
+    /// Write `link(p)` on either a dynamic node or a static high-memory list head (§162).
+    pub fn set_head_link(&mut self, p: MemPtr, next: MemPtr) -> Result<(), MemoryError> {
+        self.running()?;
+        if !self.is_static_high_head(p) {
+            self.validate(p)?;
+        }
+        if next != MemPtr::NULL && !self.is_static_high_head(next) {
+            self.validate(next)?;
+        }
+        self.word_mut(p.0).set_link(next.0);
+        Ok(())
+    }
+
+    /// §121: `free_avail(p)` single-word node reclamation.
+    pub fn free_avail(&mut self, p: MemPtr) -> Result<(), MemoryError> {
+        self.running()?;
+        self.validate_single(p)?;
+        let avail = self.state.avail;
+        self.word_mut(p.0).set_link(avail.0);
+        let i = self.offset(p.0);
+        self.allocations[i] = Allocation::Free;
+        self.state.avail = p;
+        self.state.dyn_used -= 1;
+        Ok(())
+    }
+
+    /// §200: `delete_token_ref(p)`.
+    pub fn delete_token_ref(&mut self, p: MemPtr) -> Result<(), MemoryError> {
+        self.running()?;
+        let rc = self.info(p)?;
+        if rc == 0 {
+            self.flush_list(p)
+        } else {
+            self.set_info(p, rc - 1)
+        }
+    }
+
+    fn is_static_glue_spec(&self, p: MemPtr) -> bool {
+        let b = self.config.mem_bot;
+        p.0 == b || p.0 == b + 4 || p.0 == b + 8 || p.0 == b + 12 || p.0 == b + 16
+    }
+
+    fn validate_glue_spec(&self, p: MemPtr) -> Result<(), MemoryError> {
+        if self.is_static_glue_spec(p) {
+            return Ok(());
+        }
+        if p == MemPtr::NULL
+            || p.0 < self.config.mem_bot
+            || p.0 > self.config.mem_max
+            || self.allocations[self.offset(p.0)] != Allocation::Block(GLUE_SPEC_SIZE)
+        {
+            Err(MemoryError::InvalidNode)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// §150: Read a 4-word glue specification (`zero_glue..fil_neg_glue` or dynamic `glue_spec_size` block).
+    pub fn glue_spec(&self, p: MemPtr) -> Result<GlueSpec, MemoryError> {
+        self.validate_glue_spec(p)?;
+        let q = self.word(p.0).quarters();
+        let ref_count = self.word(p.0).link();
+        let width = Scaled::from_raw(self.word(p.0 + 1).integer())
+            .ok_or(MemoryError::InvalidConfiguration)?;
+        let stretch = Scaled::from_raw(self.word(p.0 + 2).integer())
+            .ok_or(MemoryError::InvalidConfiguration)?;
+        let shrink = Scaled::from_raw(self.word(p.0 + 3).integer())
+            .ok_or(MemoryError::InvalidConfiguration)?;
+        Ok(GlueSpec {
+            width,
+            stretch,
+            shrink,
+            stretch_order: q[0],
+            shrink_order: q[1],
+            ref_count,
+        })
+    }
+
+    /// §150: Write a 4-word glue specification.
+    pub fn set_glue_spec(&mut self, p: MemPtr, spec: GlueSpec) -> Result<(), MemoryError> {
+        self.running()?;
+        self.validate_glue_spec(p)?;
+        let [r_hi, r_lo] = spec.ref_count.to_be_bytes();
+        self.word_mut(p.0)
+            .set_quarters([spec.stretch_order, spec.shrink_order, r_hi, r_lo]);
+        self.word_mut(p.0 + 1).set_integer(spec.width.raw());
+        self.word_mut(p.0 + 2).set_integer(spec.stretch.raw());
+        self.word_mut(p.0 + 3).set_integer(spec.shrink.raw());
+        Ok(())
+    }
+
+    /// §150: Read `glue_ref_count(p)`.
+    pub fn glue_ref_count(&self, p: MemPtr) -> Result<u16, MemoryError> {
+        self.validate_glue_spec(p)?;
+        Ok(self.word(p.0).link())
+    }
+
+    /// §150: Set `glue_ref_count(p)`.
+    pub fn set_glue_ref_count(&mut self, p: MemPtr, count: u16) -> Result<(), MemoryError> {
+        self.running()?;
+        self.validate_glue_spec(p)?;
+        self.word_mut(p.0).set_link(count);
+        Ok(())
+    }
+
+    /// §150: `incr(glue_ref_count(p))`.
+    pub fn add_glue_ref(&mut self, p: MemPtr) -> Result<(), MemoryError> {
+        let rc = self.glue_ref_count(p)?;
+        self.set_glue_ref_count(p, rc.saturating_add(1))
+    }
+
+    /// §151: `new_null_glue` (allocate a zeroed 4-word glue specification with `glue_ref_count = null`).
+    pub fn new_null_glue(&mut self) -> Result<MemPtr, MemoryError> {
+        let NodeAllocation::Allocated(q) = self.get_node(i32::from(GLUE_SPEC_SIZE))? else {
+            return Err(MemoryError::InvalidSize);
+        };
+        self.set_glue_spec(q, GlueSpec::default())?;
+        Ok(q)
+    }
+
+    /// §151: `new_spec(p)` (duplicate glue specification `p` with `glue_ref_count = null`).
+    pub fn new_spec(&mut self, p: MemPtr) -> Result<MemPtr, MemoryError> {
+        let mut spec = self.glue_spec(p)?;
+        let NodeAllocation::Allocated(q) = self.get_node(i32::from(GLUE_SPEC_SIZE))? else {
+            return Err(MemoryError::InvalidSize);
+        };
+        spec.ref_count = 0;
+        self.set_glue_spec(q, spec)?;
+        Ok(q)
+    }
+
+    /// §201: `delete_glue_ref(p)`.
+    pub fn delete_glue_ref(&mut self, p: MemPtr) -> Result<(), MemoryError> {
+        self.running()?;
+        let rc = self.glue_ref_count(p)?;
+        if rc == 0 {
+            self.free_node(p, GLUE_SPEC_SIZE)
+        } else {
+            self.set_glue_ref_count(p, rc - 1)
+        }
+    }
+
+    /// §§275, 1248: Allocate a `2n + 1`-word `\parshape` block where `info(p) = n`.
+    pub fn alloc_par_shape(&mut self, lines: &[(Scaled, Scaled)]) -> Result<MemPtr, MemoryError> {
+        let n = u16::try_from(lines.len()).map_err(|_| MemoryError::InvalidSize)?;
+        if n == 0 {
+            return Ok(MemPtr::NULL);
+        }
+        let total_words = 2 * i32::from(n) + 1;
+        let NodeAllocation::Allocated(p) = self.get_node(total_words)? else {
+            return Err(MemoryError::InvalidSize);
+        };
+        self.word_mut(p.0).set_info(n);
+        for (idx, &(indent, width)) in lines.iter().enumerate() {
+            let base = p.0 + 1 + 2 * (idx as u16);
+            self.word_mut(base).set_integer(indent.raw());
+            self.word_mut(base + 1).set_integer(width.raw());
+        }
+        Ok(p)
+    }
+
+    /// §§275, 1248: Read the `(indent, width)` pairs from a `\parshape` block.
+    pub fn par_shape_lines(&self, p: MemPtr) -> Result<Vec<(Scaled, Scaled)>, MemoryError> {
+        if p == MemPtr::NULL {
+            return Ok(Vec::new());
+        }
+        self.validate(p)?;
+        let n = self.word(p.0).info();
+        let expected_size = 2_u16
+            .checked_mul(n)
+            .and_then(|v| v.checked_add(1))
+            .ok_or(MemoryError::InvalidSize)?;
+        if self.allocations[self.offset(p.0)] != Allocation::Block(expected_size) {
+            return Err(MemoryError::WrongAllocationKind);
+        }
+        let mut out = Vec::with_capacity(usize::from(n));
+        for idx in 0..n {
+            let base = p.0 + 1 + 2 * idx;
+            let indent = Scaled::from_raw(self.word(base).integer())
+                .ok_or(MemoryError::InvalidConfiguration)?;
+            let width = Scaled::from_raw(self.word(base + 1).integer())
+                .ok_or(MemoryError::InvalidConfiguration)?;
+            out.push((indent, width));
+        }
+        Ok(out)
+    }
+
+    /// §275: `if q <> null then free_node(q, 2 * info(q) + 1)`.
+    pub fn free_par_shape(&mut self, p: MemPtr) -> Result<(), MemoryError> {
+        if p == MemPtr::NULL {
+            return Ok(());
+        }
+        let n = self.info(p)?;
+        let size = 2_u16
+            .checked_mul(n)
+            .and_then(|v| v.checked_add(1))
+            .ok_or(MemoryError::InvalidSize)?;
+        self.free_node(p, size)
     }
 }
 

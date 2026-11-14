@@ -21,8 +21,9 @@ export CARGO_HOME=/workspace/.cargo
 export PATH=/workspace/.cargo/bin:$PATH
 ```
 
-There are no crate dependencies or external test services. Tests are
-source-derived, **not differential verification**. Arithmetic uses fixed
+There are no crate dependencies or external test services. Rust tests are
+source-derived; the optional macro check below also validates shared fixtures
+against the qualified reference. Arithmetic uses fixed
 boundary vectors, state-transition checks, an i64 direct-product oracle within
 proved bounds, and 20,000 deterministic cases. The oracle for §107 overflow
 returns signed floor(abs(x*n)/32768), independently of the implementation's
@@ -57,6 +58,30 @@ exact `print_scaled`/`round_decimals` round-trip across all 65,537 fractions in
 and Part 29 file-name scanning, `TeXinputs:` fallback, and `open_log_file`
 banner/clock formatting.
 
+M4 tests cover equivalent-table layout, hash collisions, primitive registration,
+save/restore, token diagnostics, scanner states, ^^ conversion, token input
+lifetimes, context, and error hooks. `tests/macro_arguments.rs` checks compiled
+macro invocation: nine arguments, nested calls, tail calls, category-sensitive
+matching, brace delimiters, paragraph/outer-token recovery, capacity overflow,
+reference counts, and tracing. It constructs compiled definitions directly;
+it does not claim definition-scanner or expansion-loop coverage.
+
+`tests/fixtures/macro-arguments.tsv` supplies 12 argument cases shared by the
+Rust tests and an optional reference check. Tabs delimit fields and spaces are
+significant. After building the qualified reference, run:
+
+```
+python3 -B scripts/check_macro_reference.py
+```
+
+The check verifies the build identity, runs bounded INITEX in an isolated
+directory, and compares exact `\meaning` argument strings. It retains the
+generated TeX/config, input/output, process result, hashes, environment, and
+expected/actual strings under `target/macro-reference/`. All 12 cases pass on
+the qualified profile; this is narrow macro-argument evidence, not full engine
+or TRIP compatibility. The Rust test checks token identities and reclamation
+for the same fixtures without requiring an external TeX installation.
+
 GitHub Actions runs the checks above on Rust 1.85.0 and current stable, with both
 debug and release Rust tests. Python scripts require Python >=3.11. Reference
 builds are opt-in; routine CI tests the capture runner with small subprocesses
@@ -64,11 +89,11 @@ without downloading or compiling TeX Live.
 
 ## Reference and TRIP: reference profile qualified
 
-No Webloom/reference differential runner is built yet: Webloom exposes
-arithmetic, memory, and I/O/string/error subsystems as Rust APIs, while the
-reference TeX executable exposes a document interpreter. There is no common
-runnable interface at this milestone. TANGLE generation and byte-identical
-source mirror comparison are provenance checks only.
+No whole-engine Webloom/reference differential runner is built yet: Webloom
+exposes subsystem APIs, while the reference TeX executable exposes a document
+interpreter. The shared macro fixtures above bridge one limited subsystem.
+TANGLE generation and byte-identical source mirror comparison are provenance
+checks only.
 
 Build and qualify the pinned reference profile with:
 

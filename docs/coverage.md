@@ -25,17 +25,17 @@ Changes to status require code, tests, and a corresponding verified-map update.
 | 12 | 173–198 | Displaying boxes. | M5 | Not started |
 | 13 | 199–202 | Destroying boxes. | M5 | Not started |
 | 14 | 203–206 | Copying boxes. | M5 | Not started |
-| 15 | 207–210 | The command codes. | M4 | Not started |
-| 16 | 211–219 | The semantic nest. | M4, M6 | Not started |
+| 15 | 207–210 | The command codes. | M4 | Implemented |
+| 16 | 211–219 | The semantic nest. | M4, M6 | Partial |
 | 17 | 220–255 | The table of equivalents. | M4 | Partial |
-| 18 | 256–267 | The hash table. | M4 | Not started |
-| 19 | 268–288 | Saving and restoring equivalents. | M4 | Not started |
-| 20 | 289–296 | Token lists. | M4 | Not started |
-| 21 | 297–299 | Introduction to the syntactic routines. | M4 | Not started |
+| 18 | 256–267 | The hash table. | M4 | Implemented |
+| 19 | 268–288 | Saving and restoring equivalents. | M4 | Partial |
+| 20 | 289–296 | Token lists. | M4 | Implemented |
+| 21 | 297–299 | Introduction to the syntactic routines. | M4 | Implemented |
 | 22 | 300–320 | Input stacks and states. | M4 | Partial |
 | 23 | 321–331 | Maintaining the input stacks. | M4 | Partial |
-| 24 | 332–365 | Getting the next token. | M4 | Not started |
-| 25 | 366–401 | Expanding the next token. | M4 | Not started |
+| 24 | 332–365 | Getting the next token. | M4 | Partial |
+| 25 | 366–401 | Expanding the next token. | M4 | Partial |
 | 26 | 402–463 | Basic scanning subroutines. | M4 | Not started |
 | 27 | 464–486 | Building token lists. | M4 | Not started |
 | 28 | 487–510 | Conditional processing. | M4 | Not started |
