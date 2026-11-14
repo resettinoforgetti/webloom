@@ -335,10 +335,16 @@ impl Engine {
             self.get_token()?;
             if self.io.cur_tok < i32::from(CS_TOKEN_FLAG) {
                 self.scanner.cur_val = self.io.cur_chr;
-            } else if self.io.cur_tok < i32::from(CS_TOKEN_FLAG) + 256 {
-                self.scanner.cur_val = self.io.cur_tok - i32::from(CS_TOKEN_FLAG);
+            } else if self.io.cur_tok
+                < i32::from(CS_TOKEN_FLAG) + (self.eqtb.layout.single_base as i32)
+            {
+                self.scanner.cur_val = self.io.cur_tok
+                    - i32::from(CS_TOKEN_FLAG)
+                    - (self.eqtb.layout.active_base as i32);
             } else {
-                self.scanner.cur_val = self.io.cur_tok - i32::from(CS_TOKEN_FLAG) - 256;
+                self.scanner.cur_val = self.io.cur_tok
+                    - i32::from(CS_TOKEN_FLAG)
+                    - (self.eqtb.layout.single_base as i32);
             }
             if self.scanner.cur_val > 255 {
                 self.io.print_err(pool_str("Improper alphabetic constant"));
@@ -478,6 +484,7 @@ impl Engine {
                     || self.io.cur_tok == i32::from(cmd::OTHER_CHAR) * 256 + b',' as i32
                 {
                     cur_tok_is_dot = true;
+                    self.scanner.cur_val = 0;
                 } else {
                     self.scanner.back_input(
                         &mut self.io,

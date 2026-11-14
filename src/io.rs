@@ -2337,7 +2337,7 @@ impl IoState {
             self.input_file[usize::from(self.cur_input.index_field)].close();
         }
         self.pop_input();
-        self.in_open -= 1;
+        self.in_open = self.in_open.saturating_sub(1);
     }
 
     /// §330: `clear_for_error_prompt`.

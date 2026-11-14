@@ -756,7 +756,7 @@ impl Engine {
                 } else if r == i32::from(cmd::OTHER_CHAR) * 256 + b'>' as i32 {
                     n > m
                 } else {
-                    self.io.print_err(pool_str("Illegal comparison"));
+                    self.io.print_err(pool_str("Missing = inserted for "));
                     self.error()?;
                     false
                 }
@@ -798,8 +798,27 @@ impl Engine {
                 self.scanner.scanner_status = save_status;
                 if n != self.io.cur_cmd {
                     false
-                } else {
+                } else if n < cmd::CALL {
                     p == self.io.cur_chr
+                } else if p == self.io.cur_chr {
+                    true
+                } else {
+                    let mut p_ptr = self
+                        .memory
+                        .link(MemPtr::from_address(p as u16))
+                        .unwrap_or(MemPtr::NULL);
+                    let mut q_ptr = self
+                        .memory
+                        .link(MemPtr::from_address(self.io.cur_chr as u16))
+                        .unwrap_or(MemPtr::NULL);
+                    while p_ptr != MemPtr::NULL && q_ptr != MemPtr::NULL {
+                        if self.memory.info(p_ptr) != self.memory.info(q_ptr) {
+                            break;
+                        }
+                        p_ptr = self.memory.link(p_ptr).unwrap_or(MemPtr::NULL);
+                        q_ptr = self.memory.link(q_ptr).unwrap_or(MemPtr::NULL);
+                    }
+                    p_ptr == MemPtr::NULL && q_ptr == MemPtr::NULL
                 }
             }
             crate::tables::IF_CASE_CODE => {
