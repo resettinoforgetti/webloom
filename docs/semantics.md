@@ -15,6 +15,9 @@ reset the flag before computations. Invalid API inputs leave both fields intact.
 
 | Routine | Accepted domain and exact behavior |
 |---|---|
+| half (§100) | x excludes -2^31 and 2^31-1 (where odd x+1 would exceed 2^31-1). Returns (x+1)/2 for odd x and x/2 for even x. |
+| round_decimals (§102) | 0<=k<=17 decimal digits in 0..=9. Accumulates a=(a+dig[k]*131072)/10 from k-1 down to 0 and returns (a+1)/2 in 0..=65536. |
+| print_scaled (§103) | s signed scaled. Prints '-' and negates when s<0, prints integer part and '.', then emits the shortest decimal fraction that round_decimals reconstructs to s. |
 | mult_and_add (§105) | n excludes -2^31; max >= 0. When n=0 return y without a magnitude check. Otherwise require abs(y)<=max and max+abs(y)<=2^31-1, keeping both source division numerators nonnegative and representable. Negate x,n for negative n. Use both WEB inequalities; failure sets flag and returns zero. Remainder unchanged. |
 | x_over_n (§106) | x,n exclude -2^31. Quotient truncates toward zero, remainder has x's sign even when n<0; x=q*n+r. n=0 sets flag, returns zero, stores x in remainder. |
 | xn_over_d (§107) | 0<=n<=65536, 1<=d<=65536; x excludes -2^31. Require source intermediate t,u,v <=2^31-1. Compute base-32768 limbs. If u/d>=32768 set flag and return signed **uncombined u**; still store signed v%d. Otherwise combine quotient limbs. |
@@ -114,20 +117,45 @@ error instead of running missing runaway/overflow diagnostics (§119/§120).
 Later mutation remains unavailable. Allocation indices and successful reuse
 order are unchanged. Host allocation failure is distinct from TeX capacity.
 
-## Host and future boundaries
+## I/O, strings, printing, errors, and host boundary
 
-**P** future byte input will use identity 8-bit ASCII-compatible translation
-(§§17–24); no Unicode normalization. Text files will use LF and explicit byte
-paths, with deterministic fixture-local search. This avoids locale-dependent
-decoding and implicit distribution paths. These choices are declared, **not yet
-implemented or tested**; §49's printable-string rules must remain intact.
-No document files are opened by the current CLI; it uses host CLI argument bytes
-only for exact ASCII option matching. No external command execution exists.
+**S/P** §§1–98,241–246,511–538: `IoConfig` defaults to pristine §§11–12
+capacities (`buf_size=500`, `error_line=72`, `half_error_line=42`,
+`max_print_line=79`, `max_in_open=6`, `max_strings=3000`,
+`string_vacancies=8000`, `pool_size=32000`, `file_name_size=40`,
+`dvi_buf_size=800`) and also provides the TRIP profile (`IoConfig::trip()`).
+`check_constants` enforces §§14,111,522 (`bad` cases 1–7, 17, 18, 31).
 
-Only the memory table has capacity parameters now. Future table baselines are
-the pristine §§11–12 constants (buf_size=500, stack_size=200, font_max=75,
-font_mem_size=20000, max_strings=3000, pool_size=32000, save_size=600,
-hash_size=2100, trie_size=8000); these tables do not exist in this milestone.
-INITEX, format dumping/loading and complete diagnostics are unsupported.
-Independent equivalent formats, not binary interchange, are the future contract.
-No e-TeX/pdfTeX/XeTeX/LuaTeX features are included.
+`CharTranslator::pristine` (§§21,23–24) maps printable ASCII `32..=126` to
+itself, blanks `xchr[0..31]` and `xchr[127..255]`, and computes `xord` in source
+loop order so `' '` maps to 32 while non-printable external bytes map to
+`invalid_code=127`. `CharTranslator::identity_eight_bit` provides the §23
+permissive 8-bit adaptation while keeping §49's printable-character predicate
+(`" "..="~"`) intact for `get_strings_started`.
+
+`AlphaFileIn` models Pascal file variables (`f^`, `get`, `eoln`, `eof`),
+including `/I` suppressed initial `get` on `term_in` (§33) and `eoln=true` when
+`eof` occurs mid-line (§30). `input_ln` (§31) strips trailing spaces, updates
+`max_buf_stack`, and reports buffer overflow (§35) via `FinalEnd` when
+`format_ident=0` or `overflow("buffer size", buf_size)` when a format is active.
+`get_strings_started` (§§47–53) builds strings `0..255` (`^^@`..`^^_`, printable
+ASCII, `^^?`, `^^80`..`^^ff`) and reads `TeXformats:TEX.POOL` with
+`string_vacancies` and `*504454778` checksum verification.
+
+Printing (`§§54–71`) honors all selectors (`0..15`, `no_print=16`,
+`term_only=17`, `log_only=18`, `term_and_log=19`, `pseudo=20`, `new_string=21`),
+`max_print_line` wrapping, `new_line_char`, `tally`, `trick_buf`, `slow_print`,
+and overflow-safe `print_int` (including `-2^31`). Error handling (`§§72–98`)
+implements all four interaction modes, interactive `0..9`/`E`/`H`/`I`/`Q`/`R`/`S`/`X`/`?`
+responses, the 100-error fatal threshold, `normalize_selector`, `fatal_error`,
+`overflow`, `confusion`, and `pause_for_instructions`, returning explicit
+`Result<_, Termination>` (`JumpOut` / `FinalEnd`) instead of non-local `goto`.
+Syntactic/token callbacks (`show_context`, `get_token`, `give_err_help`) are
+routed through `ErrorHooks` until M4 is attached.
+
+File-name routines (`§§511–538`) split `:`/`>` areas and `.` extensions, pack
+fixed-width `name_of_file`, format the `§536` transcript banner using the host
+`Clock` (default `1776-07-04 12:00`), and look up files in the user area and
+`TeXinputs:` inside the deterministic `HostFixture`. No ambient OS filesystem
+search, locale decoding, or external command execution is performed. The CLI
+still rejects document typesetting, INITEX, and formats until M4–M8 are complete.

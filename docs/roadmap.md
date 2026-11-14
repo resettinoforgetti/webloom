@@ -11,9 +11,13 @@ with format loading, DVI output, and reproducible, documented TRIP results.
   [reference qualification](reference.md).
 - M2: variable-size allocation implemented and tested against an independent
   interval model; see [the verified WEB map](web-map.md).
-- M3–M9: not implemented. The CLI still rejects typesetting, INITEX, and formats.
+- M3: host byte streams, file lookup, clocks, character translation, line
+  buffers, string pool (`TEX.POOL`), printing, error reporting, interaction
+  modes, and Part 29 file-name/transcript routines are implemented; token-driven
+  `scan_file_name` (`§526`) and `show_context`/`get_token` callbacks connect in M4.
+- M4–M9: not implemented. The CLI still rejects typesetting, INITEX, and formats.
 
-No later integration or whole-engine compatibility gate is passed by M1–M2. A
+No later integration or whole-engine compatibility gate is passed by M1–M3. A
 milestone is complete only when its stated acceptance checks pass; a declared
 owner in [coverage.md](coverage.md) is not implementation proof.
 

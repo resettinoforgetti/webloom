@@ -11,12 +11,12 @@ Changes to status require code, tests, and a corresponding verified-map update.
 
 | Part | Sections | Source title | Milestone | Status |
 |---|---|---|---|---|
-| 1 | 1–16 | Introduction. | M3 | Partial |
-| 2 | 17–24 | The character set. | M3 | Not started |
-| 3 | 25–37 | Input and output. | M3 | Not started |
-| 4 | 38–53 | String handling. | M3 | Not started |
-| 5 | 54–71 | On-line and off-line printing. | M3 | Not started |
-| 6 | 72–98 | Reporting errors. | M3 | Not started |
+| 1 | 1–16 | Introduction. | M3 | Implemented |
+| 2 | 17–24 | The character set. | M3 | Implemented |
+| 3 | 25–37 | Input and output. | M3 | Implemented |
+| 4 | 38–53 | String handling. | M3 | Implemented |
+| 5 | 54–71 | On-line and off-line printing. | M3 | Implemented |
+| 6 | 72–98 | Reporting errors. | M3 | Implemented |
 | 7 | 99–109 | Arithmetic with scaled dimensions. | M3, M5 | Partial |
 | 8 | 110–114 | Packed data. | M5 | Partial |
 | 9 | 115–132 | Dynamic memory allocation. | M2, M8 | Partial |
@@ -27,19 +27,19 @@ Changes to status require code, tests, and a corresponding verified-map update.
 | 14 | 203–206 | Copying boxes. | M5 | Not started |
 | 15 | 207–210 | The command codes. | M4 | Not started |
 | 16 | 211–219 | The semantic nest. | M4, M6 | Not started |
-| 17 | 220–255 | The table of equivalents. | M4 | Not started |
+| 17 | 220–255 | The table of equivalents. | M4 | Partial |
 | 18 | 256–267 | The hash table. | M4 | Not started |
 | 19 | 268–288 | Saving and restoring equivalents. | M4 | Not started |
 | 20 | 289–296 | Token lists. | M4 | Not started |
 | 21 | 297–299 | Introduction to the syntactic routines. | M4 | Not started |
-| 22 | 300–320 | Input stacks and states. | M4 | Not started |
-| 23 | 321–331 | Maintaining the input stacks. | M4 | Not started |
+| 22 | 300–320 | Input stacks and states. | M4 | Partial |
+| 23 | 321–331 | Maintaining the input stacks. | M4 | Partial |
 | 24 | 332–365 | Getting the next token. | M4 | Not started |
 | 25 | 366–401 | Expanding the next token. | M4 | Not started |
 | 26 | 402–463 | Basic scanning subroutines. | M4 | Not started |
 | 27 | 464–486 | Building token lists. | M4 | Not started |
 | 28 | 487–510 | Conditional processing. | M4 | Not started |
-| 29 | 511–538 | File names. | M3 | Not started |
+| 29 | 511–538 | File names. | M3 | Partial |
 | 30 | 539–582 | Font metric data. | M5 | Not started |
 | 31 | 583–591 | Device-independent file format. | M5 | Not started |
 | 32 | 592–643 | Shipping pages out. | M5 | Not started |
@@ -64,5 +64,5 @@ Changes to status require code, tests, and a corresponding verified-map update.
 | 51 | 1330–1337 | The main program. | M8 | Not started |
 | 52 | 1338–1339 | Debugging. | M9 | Not started |
 | 53 | 1340–1378 | Extensions. | M7 | Not started |
-| 54 | 1379–1379 | System-dependent changes. | M3, M9 | Not started |
+| 54 | 1379–1379 | System-dependent changes. | M3, M9 | Partial |
 | 55 | 1380–1380 | Index. | M9 | Non-runtime |

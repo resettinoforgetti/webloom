@@ -45,6 +45,18 @@ partitioning. Fixed cases cover exact fit, singleton retention, one-word
 remainders, growth thresholds, maximum halfword bounds, merge-only behavior,
 retained payloads, and atomic invalid reclamation.
 
+I/O, string-pool, printing, error, and file-name tests (`tests/io_strings_errors.rs`
+and `tests/arithmetic.rs`) verify all `bad` constant checks (`§§14,111,522`),
+pristine and 8-bit identity `xchr`/`xord` tables, `§§48–53` string-pool
+initialization against `vendor/generated/tex.pool` plus all six `bad_pool`
+rejection paths, `input_ln` trailing-space stripping and pre/post-format buffer
+overflow (`§35`), `init_terminal` (`§37`), all print selectors and line wrapping,
+exact `print_scaled`/`round_decimals` round-trip across all 65,537 fractions in
+`0..=unity`, interactive and scrolled `error` recovery (`0..9`, `E`, `H`, `I`,
+`Q`, `R`, `S`, `X`, `?`, 100-error stop, `confusion`, `pause_for_instructions`),
+and Part 29 file-name scanning, `TeXinputs:` fallback, and `open_log_file`
+banner/clock formatting.
+
 GitHub Actions runs the checks above on Rust 1.85.0 and current stable, with both
 debug and release Rust tests. Python scripts require Python >=3.11. Reference
 builds are opt-in; routine CI tests the capture runner with small subprocesses
@@ -53,10 +65,10 @@ without downloading or compiling TeX Live.
 ## Reference and TRIP: reference profile qualified
 
 No Webloom/reference differential runner is built yet: Webloom exposes
-arithmetic/memory as Rust APIs, while the reference TeX executable exposes a
-document interpreter. There is no common runnable interface at this milestone.
-TANGLE generation and byte-identical source mirror comparison are provenance
-checks only.
+arithmetic, memory, and I/O/string/error subsystems as Rust APIs, while the
+reference TeX executable exposes a document interpreter. There is no common
+runnable interface at this milestone. TANGLE generation and byte-identical
+source mirror comparison are provenance checks only.
 
 Build and qualify the pinned reference profile with:
 
@@ -71,9 +83,9 @@ Passing `--repeat-build` runs the qualification gate across both builds, a
 perturbed clock environment (`TZ=PST8PDT`, `SOURCE_DATE_EPOCH`,
 `FORCE_SOURCE_DATE`), and the narrow Appendix A allowance validator while
 retaining raw `.diff` files; see [reference qualification](reference.md).
-Webloom must implement input, expansion, typesetting, diagnostics, INITEX, and
-independent formats before its own TRIP run or document/DVI comparison is
-possible.
+Webloom must implement scanning/expansion (`M4`), typesetting (`M5–M7`), and
+INITEX/independent formats (`M8`) before its own TRIP run or document/DVI
+comparison is possible.
 
 The future two-engine runner must create separate temporary working directories with
 identical copied fixture bytes. Bound wall time (initially 30 seconds/process)
@@ -155,9 +167,9 @@ reference build qualification, and format interchange is outside the contract.
 
 ### 2026-11-14 implementation checkpoint
 
-- Rust 1.85.0 and stable: 26 tests passed in each of debug and release;
+- Rust 1.85.0 and stable: 35 tests passed in each of debug and release;
   no ignored tests. Formatting and Clippy (`--all-targets -- -D warnings`) pass.
-- Source hashes and 36 WEB anchors pass; the coverage ledger accounts for
+- Source hashes and 92 WEB anchors pass; the coverage ledger accounts for
   all 55 parts and 1,380 sections.
 - Six Python capture and qualification tests pass: exact binary I/O/nonzero exit
   capture, timeout retention, generated-file size limits, raw diff offsets,

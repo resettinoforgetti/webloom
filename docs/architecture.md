@@ -1,9 +1,10 @@
 # Implemented design
 
-`Engine` owns `Arithmetic` and `Memory`; there are no globals or host services.
-Arithmetic state includes the sticky error flag and division remainder.
-`Scaled` is a signed integer in the source's magnitude-below-2^31 domain,
-not a restriction to user-entered dimensions (which have the smaller 2^30 bound).
+`Engine` owns `Arithmetic`, `Memory`, and `IoState`; there are no globals or
+ambient OS services. Arithmetic state includes the sticky error flag and
+division remainder, plus `half` (§100) and `round_decimals` (§102). `Scaled` is
+a signed integer in the source's magnitude-below-2^31 domain, not a restriction
+to user-entered dimensions (which have the smaller 2^30 bound).
 
 Memory is one fixed-size indexed vector, allocated once. `MemPtr` distinguishes
 addresses from numeric fields; null is the source's halfword zero. Private raw
@@ -14,7 +15,6 @@ from a block's high end, and shared high/low frontiers. One free block always
 remains in the ring. A side table distinguishes free words, single-word nodes,
 variable-block heads (with their size), and interiors. It validates access and
 reclamation without selecting addresses or changing valid allocation order.
-No other engine subsystems are scaffolded.
 
 `get_node(i32)` returns `NodeAllocation::Allocated(MemPtr)` or, for the
 `COALESCE_REQUEST` sentinel, `NodeAllocation::Coalesced`. The latter represents
@@ -23,9 +23,21 @@ WEB's max_halfword return without treating that flag as an address.
 `rover` and `var_used` (initially 20 static low words); `dyn_used` remains the
 independent high-word count. Existing head-field access supports both allocation
 kinds; `flush_list` accepts only single-word nodes. Interior word/node-layout
-access belongs to the subsequent node milestone.
+access belongs to the subsequent node milestone (`M5`).
+
+`IoState` (`src/io.rs`) implements the M3 subsystems (`§§1–98, 103, 241–246,
+511–538`): capacity constant verification (`IoConfig::check_constants`),
+`CharTranslator` (`xchr`/`xord`), `AlphaFileIn`/`ByteFileIn` streams and the
+deterministic `HostFixture` (`Clock`, terminal I/O, and area-aware file store),
+`input_ln` and `init_terminal`, the string pool (`StrNum`, `make_string`,
+`get_strings_started` loading `vendor/generated/tex.pool` and checking `*504454778`),
+multi-selector printing (`print_ln`, `print_char`, `print`, `slow_print`,
+`print_int`, `print_scaled`, `print_roman_int`, `term_input`), interactive and
+non-interactive error handling (`Interaction`, `History`, `ErrorHooks`,
+`Termination`), and Part 29 file-name scanning, packing, and transcript log
+opening (`open_log_file`).
 
 Fallible APIs separate violated internal preconditions from source arithmetic
-errors and fatal memory exhaustion. The CLI reports status and rejects all
-typesetting requests with failure status. There is no host file-search layer,
-format loader, diagnostic renderer, or fake DVI output.
+errors, fatal memory exhaustion, and TeX `jump_out`/`final_end` termination.
+The CLI reports status and rejects all typesetting requests with failure status
+until `M4–M8` are implemented.
