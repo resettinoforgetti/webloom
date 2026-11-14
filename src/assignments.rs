@@ -17,7 +17,8 @@ impl Engine {
         if self.scanner.cur_cs == 0
             || usize::from(self.scanner.cur_cs) > self.eqtb.layout.frozen_control_sequence
         {
-            self.io.print_err(pool_str("Missing control sequence inserted"));
+            self.io
+                .print_err(pool_str("Missing control sequence inserted"));
             self.scanner.back_error(
                 &mut self.io,
                 &mut self.eqtb,
@@ -25,7 +26,8 @@ impl Engine {
                 &mut self.memory,
             )?;
             self.scanner.cur_cs = self.eqtb.layout.frozen_protection as u16;
-            self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
+            self.io.cur_tok =
+                i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
         }
         Ok(())
     }
@@ -129,7 +131,12 @@ impl Engine {
                     let q = self.io.cur_tok;
                     self.get_token()?;
                     self.io.cur_tok = q;
-                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                    self.scanner.back_input(
+                        &mut self.io,
+                        &mut self.eqtb,
+                        &mut self.hash,
+                        &mut self.memory,
+                    )?;
                 }
                 let t = self.io.cur_cmd;
                 let e = self.io.cur_chr;
@@ -216,27 +223,32 @@ impl Engine {
                 };
                 self.scan_optional_equals()?;
                 self.get_x_token_skip_spaces()?;
-                if self.io.cur_cmd != cmd::LEFT_BRACE {
-                    if self.io.cur_cmd == cmd::TOKS_REGISTER || self.io.cur_cmd == cmd::ASSIGN_TOKS
-                    {
-                        let q = if self.io.cur_cmd == cmd::TOKS_REGISTER {
-                            self.scan_eight_bit_int()?;
-                            self.eqtb.layout.toks_base + self.scanner.cur_val as usize
-                        } else {
-                            self.io.cur_chr as usize
-                        };
-                        let val = self.eqtb.equiv(q);
-                        if val != 0 {
-                            let ptr = MemPtr::from_address(val);
-                            if let Ok(rc) = self.memory.info(ptr) {
-                                self.memory.set_info(ptr, rc.saturating_add(1)).ok();
-                            }
+                if self.io.cur_cmd != cmd::LEFT_BRACE
+                    && (self.io.cur_cmd == cmd::TOKS_REGISTER
+                        || self.io.cur_cmd == cmd::ASSIGN_TOKS)
+                {
+                    let q = if self.io.cur_cmd == cmd::TOKS_REGISTER {
+                        self.scan_eight_bit_int()?;
+                        self.eqtb.layout.toks_base + self.scanner.cur_val as usize
+                    } else {
+                        self.io.cur_chr as usize
+                    };
+                    let val = self.eqtb.equiv(q);
+                    if val != 0 {
+                        let ptr = MemPtr::from_address(val);
+                        if let Ok(rc) = self.memory.info(ptr) {
+                            self.memory.set_info(ptr, rc.saturating_add(1)).ok();
                         }
-                        self.define(a, p, cmd::UNDEFINED_CS, i32::from(val));
-                        return Ok(());
                     }
+                    self.define(a, p, cmd::UNDEFINED_CS, i32::from(val));
+                    return Ok(());
                 }
-                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
                 let q = self.scan_toks(false, false)?;
                 if self.memory.link(q).unwrap_or(MemPtr::NULL) == MemPtr::NULL {
                     self.define(a, p, cmd::UNDEFINED_CS, 0);
@@ -277,15 +289,28 @@ impl Engine {
                 match l {
                     INT_VAL => {
                         self.scan_int()?;
-                        self.word_define(a, self.eqtb.layout.count_base + idx, self.scanner.cur_val);
+                        self.word_define(
+                            a,
+                            self.eqtb.layout.count_base + idx,
+                            self.scanner.cur_val,
+                        );
                     }
                     DIMEN_VAL => {
                         self.scan_dimen(false, false, false)?;
-                        self.word_define(a, self.eqtb.layout.dimen_base + 256 + idx, self.scanner.cur_val);
+                        self.word_define(
+                            a,
+                            self.eqtb.layout.dimen_base + 256 + idx,
+                            self.scanner.cur_val,
+                        );
                     }
                     GLUE_VAL => {
                         self.scan_glue(GLUE_VAL)?;
-                        self.define(a, self.eqtb.layout.skip_base + idx, cmd::GLUE_REF, self.scanner.cur_val);
+                        self.define(
+                            a,
+                            self.eqtb.layout.skip_base + idx,
+                            cmd::GLUE_REF,
+                            self.scanner.cur_val,
+                        );
                     }
                     MU_VAL => {
                         self.scan_glue(MU_VAL)?;
@@ -353,7 +378,8 @@ impl Engine {
                 (base, l)
             }
             _ => {
-                self.io.print_err(pool_str("You can't use a prefix with this"));
+                self.io
+                    .print_err(pool_str("You can't use a prefix with this"));
                 self.error()?;
                 return Ok(());
             }
@@ -365,11 +391,11 @@ impl Engine {
             ArithOp::Advance => {
                 if level == INT_VAL {
                     self.scan_int()?;
-                    let old = i32::from(self.eqtb.equiv(p));
+                    let old = self.eqtb.int(p);
                     self.word_define(a, p, old.saturating_add(self.scanner.cur_val));
                 } else if level == DIMEN_VAL {
                     self.scan_dimen(false, false, false)?;
-                    let old = i32::from(self.eqtb.equiv(p));
+                    let old = self.eqtb.int(p);
                     self.word_define(a, p, old.saturating_add(self.scanner.cur_val));
                 }
             }
@@ -377,7 +403,7 @@ impl Engine {
                 self.scan_int()?;
                 let factor = self.scanner.cur_val;
                 if level <= DIMEN_VAL {
-                    let old = i32::from(self.eqtb.equiv(p));
+                    let old = self.eqtb.int(p);
                     let res = self
                         .arithmetic
                         .mult_and_add(
@@ -399,7 +425,7 @@ impl Engine {
                     self.io.print_err(pool_str("Arithmetic overflow"));
                     self.error()?;
                 } else if level <= DIMEN_VAL {
-                    let old = i32::from(self.eqtb.equiv(p));
+                    let old = self.eqtb.int(p);
                     let res = self
                         .arithmetic
                         .x_over_n(
@@ -423,11 +449,15 @@ impl Engine {
             if self.io.cur_cmd == cmd::SPACER || self.io.cur_cmd == cmd::RELAX {
                 continue;
             }
-            if self.io.cur_cmd >= cmd::PREFIX && self.io.cur_cmd <= cmd::MAX_COMMAND {
+            if self.io.cur_cmd >= cmd::MIN_INTERNAL && self.io.cur_cmd <= cmd::MAX_COMMAND {
                 self.prefixed_command()?;
             } else {
-                self.scanner
-                    .back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
                 break;
             }
         }

@@ -380,10 +380,20 @@ impl Engine {
                     if self.io.cur_cmd > cmd::MAX_COMMAND {
                         self.expand()?;
                     } else {
-                        self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                        self.scanner.back_input(
+                            &mut self.io,
+                            &mut self.eqtb,
+                            &mut self.hash,
+                            &mut self.memory,
+                        )?;
                     }
                     self.io.cur_tok = t;
-                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                    self.scanner.back_input(
+                        &mut self.io,
+                        &mut self.eqtb,
+                        &mut self.hash,
+                        &mut self.memory,
+                    )?;
                 }
                 cmd::NO_EXPAND => {
                     // §369
@@ -392,7 +402,12 @@ impl Engine {
                     self.get_token()?;
                     self.scanner.scanner_status = save_scanner_status;
                     t = self.io.cur_tok;
-                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                    self.scanner.back_input(
+                        &mut self.io,
+                        &mut self.eqtb,
+                        &mut self.hash,
+                        &mut self.memory,
+                    )?;
                     if t >= i32::from(crate::tables::CS_TOKEN_FLAG) {
                         p = self.memory.get_avail()?;
                         self.memory
@@ -403,7 +418,13 @@ impl Engine {
                             )
                             .unwrap();
                         self.memory.set_link(p, MemPtr::NULL).unwrap();
-                        self.scanner.ins_list(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory, p)?;
+                        self.scanner.ins_list(
+                            &mut self.io,
+                            &mut self.eqtb,
+                            &mut self.hash,
+                            &mut self.memory,
+                            p,
+                        )?;
                     }
                 }
                 cmd::CS_NAME => {
@@ -467,7 +488,12 @@ impl Engine {
                         )?;
                     }
                     self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(cs);
-                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                    self.scanner.back_input(
+                        &mut self.io,
+                        &mut self.eqtb,
+                        &mut self.hash,
+                        &mut self.memory,
+                    )?;
                 }
                 cmd::CONVERT => {
                     self.conv_toks()?;
@@ -490,9 +516,14 @@ impl Engine {
             self.macro_call()?;
         } else {
             // END_TEMPLATE
-            self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG)
-                + self.eqtb.layout.frozen_endv as i32;
-            self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+            self.io.cur_tok =
+                i32::from(crate::tables::CS_TOKEN_FLAG) + self.eqtb.layout.frozen_endv as i32;
+            self.scanner.back_input(
+                &mut self.io,
+                &mut self.eqtb,
+                &mut self.hash,
+                &mut self.memory,
+            )?;
         }
         Ok(())
     }
@@ -509,7 +540,8 @@ impl Engine {
         if self.scanner.cur_cs == 0 {
             self.io.cur_tok = i32::from(self.io.cur_cmd) * 256 + self.io.cur_chr;
         } else {
-            self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
+            self.io.cur_tok =
+                i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
         }
         Ok(())
     }
@@ -523,7 +555,8 @@ impl Engine {
         if self.scanner.cur_cs == 0 {
             self.io.cur_tok = i32::from(self.io.cur_cmd) * 256 + self.io.cur_chr;
         } else {
-            self.io.cur_tok = i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
+            self.io.cur_tok =
+                i32::from(crate::tables::CS_TOKEN_FLAG) + i32::from(self.scanner.cur_cs);
         }
         Ok(())
     }
@@ -577,7 +610,8 @@ impl Engine {
             }
             crate::tables::JOB_NAME_CODE => {
                 if self.io.job_name != StrNum::ZERO {
-                    text = String::from_utf8_lossy(self.io.str_bytes(self.io.job_name)).into_owned();
+                    text =
+                        String::from_utf8_lossy(self.io.str_bytes(self.io.job_name)).into_owned();
                 } else {
                     text = "texput".to_string();
                 }
@@ -596,21 +630,29 @@ impl Engine {
                 cmd::OTHER_CHAR as u16 * 256 + u16::from(b)
             };
             self.memory.set_info(q, tok).unwrap();
-            self.memory.set_link(tail, q).unwrap();
+            if tail == head {
+                self.memory.set_head_link(head, q).unwrap();
+            } else {
+                self.memory.set_link(tail, q).unwrap();
+            }
             tail = q;
         }
-        let first = self.memory.link(head).unwrap_or(MemPtr::NULL);
+        let first = self.memory.head_link(head).unwrap_or(MemPtr::NULL);
         if first != MemPtr::NULL {
-            self.scanner.ins_list(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory, first)?;
+            self.scanner.ins_list(
+                &mut self.io,
+                &mut self.eqtb,
+                &mut self.hash,
+                &mut self.memory,
+                first,
+            )?;
         }
         Ok(())
     }
 
     /// §495: Push conditional state onto `cond_ptr` stack.
     fn push_cond(&mut self) -> Result<(), Termination> {
-        let crate::memory::NodeAllocation::Allocated(p) =
-            self.memory.get_node(i32::from(2))?
-        else {
+        let crate::memory::NodeAllocation::Allocated(p) = self.memory.get_node(2)? else {
             return Err(Termination::JumpOut);
         };
         self.memory
@@ -620,7 +662,7 @@ impl Engine {
         self.memory.set_info(p, packed).expect("cond info");
         self.scanner.cond_ptr = p;
         self.scanner.cur_if = self.io.cur_chr as u8;
-        self.scanner.if_limit = crate::tables::IF_CODE as u8;
+        self.scanner.if_limit = crate::tables::IF_CODE;
         self.scanner.if_line = self.io.line;
         Ok(())
     }
@@ -756,8 +798,6 @@ impl Engine {
                 self.scanner.scanner_status = save_status;
                 if n != self.io.cur_cmd {
                     false
-                } else if n < cmd::CALL {
-                    p == self.io.cur_chr
                 } else {
                     p == self.io.cur_chr
                 }
@@ -815,8 +855,13 @@ impl Engine {
     /// §510: Handle `\else`, `\or`, `\fi` encountered during normal expansion.
     pub fn fi_or_else(&mut self) -> Result<(), Termination> {
         if self.io.cur_chr > i32::from(self.scanner.if_limit) {
-            if self.scanner.if_limit == crate::tables::IF_CODE as u8 {
-                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+            if self.scanner.if_limit == crate::tables::IF_CODE {
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
                 return Ok(());
             }
             self.io.print_err(pool_str("Extra "));

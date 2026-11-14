@@ -35,10 +35,10 @@ Changes to status require code, tests, and a corresponding verified-map update.
 | 22 | 300–320 | Input stacks and states. | M4 | Partial |
 | 23 | 321–331 | Maintaining the input stacks. | M4 | Partial |
 | 24 | 332–365 | Getting the next token. | M4 | Partial |
-| 25 | 366–401 | Expanding the next token. | M4 | Partial |
-| 26 | 402–463 | Basic scanning subroutines. | M4 | Not started |
-| 27 | 464–486 | Building token lists. | M4 | Not started |
-| 28 | 487–510 | Conditional processing. | M4 | Not started |
+| 25 | 366–401 | Expanding the next token. | M4 | Implemented |
+| 26 | 402–463 | Basic scanning subroutines. | M4 | Implemented |
+| 27 | 464–486 | Building token lists. | M4 | Implemented |
+| 28 | 487–510 | Conditional processing. | M4 | Implemented |
 | 29 | 511–538 | File names. | M3 | Partial |
 | 30 | 539–582 | Font metric data. | M5 | Not started |
 | 31 | 583–591 | Device-independent file format. | M5 | Not started |
@@ -59,7 +59,7 @@ Changes to status require code, tests, and a corresponding verified-map update.
 | 46 | 1029–1054 | The chief executive. | M5, M6, M7 | Not started |
 | 47 | 1055–1135 | Building boxes and lists. | M5, M6 | Not started |
 | 48 | 1136–1207 | Building math lists. | M7 | Not started |
-| 49 | 1208–1298 | Mode-independent processing. | M4, M7 | Not started |
+| 49 | 1208–1298 | Mode-independent processing. | M4, M7 | Partial |
 | 50 | 1299–1329 | Dumping and undumping the tables. | M8 | Not started |
 | 51 | 1330–1337 | The main program. | M8 | Not started |
 | 52 | 1338–1339 | Debugging. | M9 | Not started |

@@ -13,13 +13,14 @@ with format loading, DVI output, and reproducible, documented TRIP results.
   interval model; see [the verified WEB map](web-map.md).
 - M3: host byte streams, file lookup, clocks, character translation, line
   buffers, string pool (`TEX.POOL`), printing, error reporting, interaction
-  modes, and Part 29 file-name/transcript routines are implemented; token-driven
-  `scan_file_name` (`§526`) remains pending in M4.
+  modes, and Part 29 file-name/transcript routines are implemented.
 - M4: command/equivalent/hash/save tables, primitive registration, semantic nest
   storage, token lists, input stacks, lexical scanning, live error callbacks,
-  and macro argument matching (`§§387–401`) are implemented as subsystem APIs.
-  Expansion dispatch, basic value scanners, definition scanning, conditionals,
-  and assignment execution remain unfinished. See [the verified map](web-map.md).
+  macro argument matching (`§§387–401`), expansion dispatch (`§§366–386`),
+  basic value scanners (`§§402–463`), token-list/definition scanning (`§§464–486`),
+  conditionals (`§§487–510`), mode-independent assignments (`§§1208–1270`), and
+  token-driven `scan_file_name` (`§526`) are implemented as subsystem APIs.
+  See [the verified map](web-map.md).
 - M5–M9: not implemented. The CLI still rejects typesetting, INITEX, and formats.
 
 No later integration or whole-engine compatibility gate is passed by M1–M3. A

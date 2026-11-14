@@ -55,7 +55,12 @@ impl Engine {
             }
         }
         if self.io.cur_tok != i32::from(cmd::OTHER_CHAR) * 256 + b'=' as i32 {
-            self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+            self.scanner.back_input(
+                &mut self.io,
+                &mut self.eqtb,
+                &mut self.hash,
+                &mut self.memory,
+            )?;
         }
         Ok(())
     }
@@ -82,22 +87,36 @@ impl Engine {
                 self.memory
                     .set_info(q, self.io.cur_tok as u16)
                     .expect("keyword token");
-                self.memory.set_link(p, q).expect("keyword link");
+                if p == head {
+                    self.memory.set_head_link(head, q).expect("keyword link");
+                } else {
+                    self.memory.set_link(p, q).expect("keyword link");
+                }
                 p = q;
                 k += 1;
             } else if self.io.cur_cmd == cmd::SPACER && p == head {
                 // Skip leading spaces before keyword
             } else {
-                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
-                let first = self.memory.link(head).unwrap();
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
+                let first = self.memory.head_link(head).unwrap_or(MemPtr::NULL);
                 if first != MemPtr::NULL {
-                    self.scanner
-                        .ins_list(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory, first)?;
+                    self.scanner.ins_list(
+                        &mut self.io,
+                        &mut self.eqtb,
+                        &mut self.hash,
+                        &mut self.memory,
+                        first,
+                    )?;
                 }
                 return Ok(false);
             }
         }
-        let first = self.memory.link(head).unwrap();
+        let first = self.memory.head_link(head).unwrap_or(MemPtr::NULL);
         self.memory.flush_list(first)?;
         Ok(true)
     }
@@ -220,19 +239,23 @@ impl Engine {
                 let idx = self.scanner.cur_val as usize;
                 match m as u16 {
                     INT_VAL => {
-                        self.scanner.cur_val = i32::from(self.eqtb.equiv(self.eqtb.layout.count_base + idx));
+                        self.scanner.cur_val =
+                            i32::from(self.eqtb.equiv(self.eqtb.layout.count_base + idx));
                         self.scanner.cur_val_level = INT_VAL;
                     }
                     crate::tables::DIMEN_VAL => {
-                        self.scanner.cur_val = i32::from(self.eqtb.equiv(self.eqtb.layout.dimen_base + 256 + idx));
+                        self.scanner.cur_val =
+                            i32::from(self.eqtb.equiv(self.eqtb.layout.dimen_base + 256 + idx));
                         self.scanner.cur_val_level = crate::tables::DIMEN_VAL;
                     }
                     crate::tables::GLUE_VAL => {
-                        self.scanner.cur_val = i32::from(self.eqtb.equiv(self.eqtb.layout.skip_base + idx));
+                        self.scanner.cur_val =
+                            i32::from(self.eqtb.equiv(self.eqtb.layout.skip_base + idx));
                         self.scanner.cur_val_level = crate::tables::GLUE_VAL;
                     }
                     MU_VAL => {
-                        self.scanner.cur_val = i32::from(self.eqtb.equiv(self.eqtb.layout.skip_base + 256 + idx));
+                        self.scanner.cur_val =
+                            i32::from(self.eqtb.equiv(self.eqtb.layout.skip_base + 256 + idx));
                         self.scanner.cur_val_level = MU_VAL;
                     }
                     _ => {
@@ -268,21 +291,17 @@ impl Engine {
 
         // Convert between levels if needed (§§429–431)
         while self.scanner.cur_val_level > level {
-            if self.scanner.cur_val_level == u16::from(crate::tables::GLUE_VAL)
-                || self.scanner.cur_val_level == u16::from(MU_VAL)
+            if self.scanner.cur_val_level == crate::tables::GLUE_VAL
+                || self.scanner.cur_val_level == MU_VAL
             {
                 let p = MemPtr::from_address(self.scanner.cur_val as u16);
-                self.scanner.cur_val = self
-                    .memory
-                    .glue_spec(p)
-                    .map(|s| s.width.raw())
-                    .unwrap_or(0);
+                self.scanner.cur_val = self.memory.glue_spec(p).map(|s| s.width.raw()).unwrap_or(0);
             }
             self.scanner.cur_val_level -= 1;
         }
 
         if negative {
-            if self.scanner.cur_val_level >= u16::from(crate::tables::GLUE_VAL) {
+            if self.scanner.cur_val_level >= crate::tables::GLUE_VAL {
                 let old = MemPtr::from_address(self.scanner.cur_val as u16);
                 let new_p = self.memory.new_spec(old)?;
                 if let Ok(mut spec) = self.memory.glue_spec(new_p) {
@@ -382,7 +401,8 @@ impl Engine {
             }
 
             if vacuous {
-                self.io.print_err(pool_str("Missing number, treated as zero"));
+                self.io
+                    .print_err(pool_str("Missing number, treated as zero"));
                 self.scanner.back_error(
                     &mut self.io,
                     &mut self.eqtb,
@@ -390,7 +410,12 @@ impl Engine {
                     &mut self.memory,
                 )?;
             } else if self.io.cur_cmd != cmd::SPACER {
-                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
             }
             self.scanner.cur_val = val;
         }
@@ -405,18 +430,18 @@ impl Engine {
     pub fn scan_optional_space(&mut self) -> Result<(), Termination> {
         self.get_x_token()?;
         if self.io.cur_cmd != cmd::SPACER {
-            self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+            self.scanner.back_input(
+                &mut self.io,
+                &mut self.eqtb,
+                &mut self.hash,
+                &mut self.memory,
+            )?;
         }
         Ok(())
     }
 
     /// §§448–460: Scan a dimension (`scaled` integer).
-    pub fn scan_dimen(
-        &mut self,
-        mu: bool,
-        inf: bool,
-        shortcut: bool,
-    ) -> Result<(), Termination> {
+    pub fn scan_dimen(&mut self, mu: bool, inf: bool, shortcut: bool) -> Result<(), Termination> {
         let mut negative = false;
         let mut f: i32 = 0;
         self.scanner.cur_order = NORMAL;
@@ -432,11 +457,7 @@ impl Engine {
             }
 
             if self.io.cur_cmd >= cmd::MIN_INTERNAL && self.io.cur_cmd <= cmd::MAX_INTERNAL {
-                let target_level = if mu {
-                    MU_VAL
-                } else {
-                    crate::tables::DIMEN_VAL
-                };
+                let target_level = if mu { MU_VAL } else { crate::tables::DIMEN_VAL };
                 self.scan_something_internal(target_level, false)?;
                 if self.scanner.cur_val_level >= crate::tables::DIMEN_VAL {
                     if negative {
@@ -445,7 +466,12 @@ impl Engine {
                     return Ok(());
                 }
             } else {
-                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
                 let mut cur_tok_is_dot = false;
                 self.get_x_token_skip_spaces()?;
                 if self.io.cur_tok == i32::from(cmd::OTHER_CHAR) * 256 + b'.' as i32
@@ -453,7 +479,12 @@ impl Engine {
                 {
                     cur_tok_is_dot = true;
                 } else {
-                    self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                    self.scanner.back_input(
+                        &mut self.io,
+                        &mut self.eqtb,
+                        &mut self.hash,
+                        &mut self.memory,
+                    )?;
                     self.scan_int()?;
                     self.get_x_token()?;
                     if self.io.cur_tok == i32::from(cmd::OTHER_CHAR) * 256 + b'.' as i32
@@ -461,7 +492,12 @@ impl Engine {
                     {
                         cur_tok_is_dot = true;
                     } else {
-                        self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                        self.scanner.back_input(
+                            &mut self.io,
+                            &mut self.eqtb,
+                            &mut self.hash,
+                            &mut self.memory,
+                        )?;
                     }
                 }
 
@@ -483,7 +519,12 @@ impl Engine {
                         }
                     }
                     if self.io.cur_cmd != cmd::SPACER {
-                        self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                        self.scanner.back_input(
+                            &mut self.io,
+                            &mut self.eqtb,
+                            &mut self.hash,
+                            &mut self.memory,
+                        )?;
                     }
                     f = round_decimals(&digits[..k]).map(Scaled::raw).unwrap_or(0);
                     self.scanner.cur_val = saved_val;
@@ -501,7 +542,8 @@ impl Engine {
             self.scanner.cur_order = FIL;
             while self.scan_keyword("l")? {
                 if self.scanner.cur_order == FILLL {
-                    self.io.print_err(pool_str("Illegal unit of measure (replaced by filll)"));
+                    self.io
+                        .print_err(pool_str("Illegal unit of measure (replaced by filll)"));
                     self.error()?;
                 } else {
                     self.scanner.cur_order += 1;
@@ -517,7 +559,8 @@ impl Engine {
 
         if mu {
             if !self.scan_keyword("mu")? {
-                self.io.print_err(pool_str("Illegal unit of measure (mu inserted)"));
+                self.io
+                    .print_err(pool_str("Illegal unit of measure (mu inserted)"));
                 self.error()?;
             }
             self.scanner.cur_val = self.scanner.cur_val.saturating_mul(65536).saturating_add(f);
@@ -555,7 +598,8 @@ impl Engine {
             // M5 will provide actual font quad/x_height; use 10pt / 4.3pt stub for M4.
             (10, 1)
         } else {
-            self.io.print_err(pool_str("Illegal unit of measure (pt inserted)"));
+            self.io
+                .print_err(pool_str("Illegal unit of measure (pt inserted)"));
             self.error()?;
             (1, 1)
         };
@@ -564,7 +608,8 @@ impl Engine {
         let scaled = if num == 1 && den == 1 {
             whole.saturating_mul(65536).saturating_add(f)
         } else {
-            let total_sp = (i64::from(whole) * 65536 + i64::from(f)) * i64::from(num) / i64::from(den);
+            let total_sp =
+                (i64::from(whole) * 65536 + i64::from(f)) * i64::from(num) / i64::from(den);
             total_sp.clamp(-i64::from(MAX_DIMEN), i64::from(MAX_DIMEN)) as i32
         };
 
@@ -659,13 +704,15 @@ impl Engine {
                         break;
                     }
                     if t >= 9 {
-                        self.io.print_err(pool_str("You already have nine parameters"));
+                        self.io
+                            .print_err(pool_str("You already have nine parameters"));
                         self.error()?;
                     } else {
                         t += 1;
                         let expected = i32::from(ZERO_TOKEN) + i32::from(t);
                         if self.io.cur_tok != expected {
-                            self.io.print_err(pool_str("Parameters must be numbered consecutively"));
+                            self.io
+                                .print_err(pool_str("Parameters must be numbered consecutively"));
                             self.scanner.back_error(
                                 &mut self.io,
                                 &mut self.eqtb,
@@ -737,17 +784,20 @@ impl Engine {
                 self.get_token()?;
                 if self.io.cur_cmd == cmd::MAC_PARAM {
                     // ## -> single #
-                } else if self.io.cur_tok >= i32::from(ZERO_TOKEN) + 1
+                } else if self.io.cur_tok > i32::from(ZERO_TOKEN)
                     && self.io.cur_tok <= i32::from(ZERO_TOKEN) + i32::from(t)
                 {
                     let param_idx = (self.io.cur_tok - i32::from(ZERO_TOKEN) - 1) as u16;
                     let q = self.memory.get_avail()?;
-                    self.memory.set_info(q, OUT_PARAM_TOKEN + param_idx).unwrap();
+                    self.memory
+                        .set_info(q, OUT_PARAM_TOKEN + param_idx)
+                        .unwrap();
                     self.memory.set_link(tail, q).unwrap();
                     tail = q;
                     continue;
                 } else {
-                    self.io.print_err(pool_str("Illegal parameter number in definition"));
+                    self.io
+                        .print_err(pool_str("Illegal parameter number in definition"));
                     self.scanner.back_error(
                         &mut self.io,
                         &mut self.eqtb,
@@ -815,7 +865,9 @@ impl Engine {
                     p = self.memory.link(p).unwrap_or(MemPtr::NULL);
                     while p != MemPtr::NULL {
                         let q = self.memory.get_avail()?;
-                        self.memory.set_info(q, self.memory.info(p).unwrap()).unwrap();
+                        self.memory
+                            .set_info(q, self.memory.info(p).unwrap())
+                            .unwrap();
                         self.memory.set_link(tail, q).unwrap();
                         tail = q;
                         p = self.memory.link(p).unwrap_or(MemPtr::NULL);
@@ -831,8 +883,13 @@ impl Engine {
     pub fn ins_the_toks(&mut self) -> Result<(), Termination> {
         let first = self.the_toks()?;
         if first != MemPtr::NULL {
-            self.scanner
-                .ins_list(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory, first)?;
+            self.scanner.ins_list(
+                &mut self.io,
+                &mut self.eqtb,
+                &mut self.hash,
+                &mut self.memory,
+                first,
+            )?;
         }
         Ok(())
     }
@@ -849,7 +906,12 @@ impl Engine {
         }
         loop {
             if self.scanner.cur_cs != 0 || self.io.cur_cmd == cmd::SPACER {
-                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
                 break;
             }
             let c = self.io.cur_chr as u8;
@@ -857,12 +919,18 @@ impl Engine {
                 .io
                 .more_name_with_hooks(c, &mut crate::io::NoopErrorHooks)?
             {
-                self.scanner.back_input(&mut self.io, &mut self.eqtb, &mut self.hash, &mut self.memory)?;
+                self.scanner.back_input(
+                    &mut self.io,
+                    &mut self.eqtb,
+                    &mut self.hash,
+                    &mut self.memory,
+                )?;
                 break;
             }
             self.get_x_token()?;
         }
-        self.io.end_name_with_hooks(&mut crate::io::NoopErrorHooks)?;
+        self.io
+            .end_name_with_hooks(&mut crate::io::NoopErrorHooks)?;
         self.io.name_in_progress = false;
         Ok(())
     }
