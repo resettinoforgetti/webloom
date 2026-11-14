@@ -4,12 +4,14 @@
 pub mod arithmetic;
 pub mod io;
 pub mod memory;
+pub mod scanner;
 pub mod tables;
 
 use arithmetic::Arithmetic;
-use io::{HostFixture, IoConfig, IoState, NoopErrorHooks, Termination};
+use io::{HostFixture, IoConfig, IoState, Termination};
 use memory::{Memory, MemoryConfig, MemoryError};
-use tables::{Eqtb, HashTable, SaveStack, SemanticNest};
+use scanner::{Scanner, ScannerErrorHooks};
+use tables::{Eqtb, HashTable, SaveStack, SemanticNest, Token};
 
 /// Only the state required by the implemented slice; no global mutable state.
 pub struct Engine {
@@ -20,6 +22,7 @@ pub struct Engine {
     pub eqtb: Eqtb,
     pub hash: HashTable,
     pub save_stack: SaveStack,
+    pub scanner: Scanner,
 }
 
 impl Engine {
@@ -44,6 +47,7 @@ impl Engine {
         let eqtb = Eqtb::new(io.config.hash_size, &mut memory, &mut io);
         let hash = HashTable::new(&eqtb.layout);
         let save_stack = SaveStack::new(io.config.save_size);
+        let scanner = Scanner::new(io.config.param_size, &mut io);
         Ok(Self {
             arithmetic: Arithmetic::default(),
             memory,
@@ -52,6 +56,7 @@ impl Engine {
             eqtb,
             hash,
             save_stack,
+            scanner,
         })
     }
 
@@ -60,8 +65,54 @@ impl Engine {
         if self.io.str_ptr <= 256 && !self.io.get_strings_started()? {
             return Err(Termination::FinalEnd);
         }
-        let mut hooks = NoopErrorHooks;
+        let mut hooks = io::NoopErrorHooks;
         self.hash
             .init_prim(&mut self.io, &mut self.eqtb, &self.memory, &mut hooks)
+    }
+
+    /// Load a single line of text into `io.buffer` at `start = 1` for scanning.
+    pub fn set_line_bytes(&mut self, bytes: &[u8]) {
+        self.scanner.set_line_bytes(&mut self.io, &self.eqtb, bytes);
+    }
+
+    /// §§341–362: `get_next`.
+    pub fn get_next(&mut self) -> Result<(), Termination> {
+        self.scanner.get_next(
+            &mut self.io,
+            &mut self.eqtb,
+            &mut self.hash,
+            &mut self.memory,
+        )
+    }
+
+    /// §365: `get_token`.
+    pub fn get_token(&mut self) -> Result<(), Termination> {
+        self.scanner.get_token(
+            &mut self.io,
+            &mut self.eqtb,
+            &mut self.hash,
+            &mut self.memory,
+        )
+    }
+
+    /// Convenience wrapper around `get_token` returning `Token(cur_tok)`.
+    pub fn next_token(&mut self) -> Result<Token, Termination> {
+        self.scanner.next_token(
+            &mut self.io,
+            &mut self.eqtb,
+            &mut self.hash,
+            &mut self.memory,
+        )
+    }
+
+    /// Invoke `io.error_with_hooks` with live M4 `ScannerErrorHooks`.
+    pub fn error(&mut self) -> Result<(), Termination> {
+        let mut hooks = ScannerErrorHooks {
+            scanner: &mut self.scanner,
+            eqtb: &mut self.eqtb,
+            hash: &mut self.hash,
+            memory: &mut self.memory,
+        };
+        self.io.error_with_hooks(&mut hooks)
     }
 }

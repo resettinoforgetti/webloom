@@ -1307,6 +1307,7 @@ impl HashTable {
     }
 
     /// §§259–261: `id_lookup(j, l)` searches or inserts `buffer[j .. j + l]`.
+    /// §§259–261: `id_lookup(j, l)` searches or inserts `buffer[j .. j + l]`.
     pub fn id_lookup(
         &mut self,
         io: &mut IoState,
@@ -1315,6 +1316,21 @@ impl HashTable {
         l: usize,
         hooks: &mut dyn ErrorHooks,
     ) -> Result<u16, Termination> {
+        match self.try_id_lookup(io, layout, j, l) {
+            Ok(cs) => Ok(cs),
+            Err((s, n)) => Err(io.overflow_with_hooks(s, n, hooks)),
+        }
+    }
+
+    /// §§259–261: `id_lookup` returning `Err((overflow_str, overflow_val))` on capacity exhaustion
+    /// so callers can invoke `io.overflow_with_hooks` after releasing `&mut self`.
+    pub fn try_id_lookup(
+        &mut self,
+        io: &mut IoState,
+        layout: &EqtbLayout,
+        j: usize,
+        l: usize,
+    ) -> Result<u16, (StrNum, i32)> {
         // §261: Compute the hash code h.
         let hash_prime = io.config.hash_prime;
         let mut h = usize::from(io.buffer[j]);
@@ -1338,11 +1354,7 @@ impl HashTable {
                     if self.text(p).0 > 0 {
                         loop {
                             if self.hash_used == layout.hash_base {
-                                return Err(io.overflow_with_hooks(
-                                    pool_str("hash size"),
-                                    layout.hash_size as i32,
-                                    hooks,
-                                ));
+                                return Err((pool_str("hash size"), layout.hash_size as i32));
                             }
                             self.hash_used -= 1;
                             if self.text(self.hash_used).0 == 0 {
@@ -1352,7 +1364,10 @@ impl HashTable {
                         self.set_next(p, self.hash_used as u16);
                         p = self.hash_used;
                     }
-                    io.str_room_with_hooks(l, hooks)?;
+                    if io.pool_ptr + l > io.config.pool_size {
+                        let n = (io.config.pool_size - io.init_pool_ptr) as i32;
+                        return Err((StrNum::POOL_SIZE, n));
+                    }
                     let d = io.cur_length();
                     while io.pool_ptr > io.str_start[io.str_ptr] {
                         io.pool_ptr -= 1;
@@ -1362,7 +1377,13 @@ impl HashTable {
                         let b = io.buffer[k];
                         io.append_char(b);
                     }
-                    let s = io.make_string_with_hooks(hooks)?;
+                    if io.str_ptr == io.config.max_strings {
+                        let n = (io.config.max_strings - io.init_str_ptr) as i32;
+                        return Err((StrNum::NUMBER_OF_STRINGS, n));
+                    }
+                    io.str_ptr += 1;
+                    io.str_start[io.str_ptr] = io.pool_ptr;
+                    let s = StrNum((io.str_ptr - 1) as u16);
                     self.set_text(p, s);
                     io.pool_ptr += d;
                     self.cs_count += 1;

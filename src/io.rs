@@ -635,12 +635,15 @@ pub struct InStateRecord {
 /// §78: Callbacks for syntactic/token subsystems (`M4`) invoked by `error` (§§82–90) and `prompt_file_name` (§530).
 pub trait ErrorHooks {
     fn show_context(&mut self, _io: &mut IoState) {}
-    fn clear_for_error_prompt(&mut self, _io: &mut IoState) {}
+    fn clear_for_error_prompt(&mut self, io: &mut IoState) {
+        io.clear_for_error_prompt_default();
+    }
     fn get_token(&mut self, _io: &mut IoState) -> Result<(), Termination> {
         Ok(())
     }
-    fn begin_file_reading(&mut self, io: &mut IoState) {
-        io.begin_file_reading_default();
+    fn begin_file_reading(&mut self, io: &mut IoState) -> Result<(), Termination> {
+        let mut hooks = NoopErrorHooks;
+        io.begin_file_reading_with_hooks(&mut hooks)
     }
     fn end_file_reading(&mut self, io: &mut IoState) {
         io.end_file_reading_default();
@@ -1726,7 +1729,7 @@ impl IoState {
                     }
                     b'I' => {
                         // §87: Introduce new material from the terminal and return.
-                        hooks.begin_file_reading(self);
+                        hooks.begin_file_reading(self)?;
                         if self.last > self.first + 1 {
                             self.cur_input.loc_field = self.first + 1;
                             self.buffer[self.first] = b' ';
@@ -2262,25 +2265,62 @@ impl IoState {
         Ok(())
     }
 
-    /// Default M3 input-stack push for `begin_file_reading` (§328).
-    pub fn begin_file_reading_default(&mut self) {
-        if self.in_open == self.config.max_in_open {
-            return;
-        }
-        if self.first == self.config.buf_size {
-            return;
-        }
-        self.in_open += 1;
-        self.input_stack[self.input_ptr] = self.cur_input;
-        self.input_ptr += 1;
+    /// §321: `push_input`.
+    pub fn push_input(&mut self, hooks: &mut dyn ErrorHooks) -> Result<(), Termination> {
         if self.input_ptr > self.max_in_stack {
             self.max_in_stack = self.input_ptr;
+            if self.input_ptr == self.config.stack_size {
+                return Err(self.overflow_with_hooks(
+                    pool_str("input stack size"),
+                    self.config.stack_size as i32,
+                    hooks,
+                ));
+            }
         }
+        self.input_stack[self.input_ptr] = self.cur_input;
+        self.input_ptr += 1;
+        Ok(())
+    }
+
+    /// §322: `pop_input`.
+    pub fn pop_input(&mut self) {
+        self.input_ptr -= 1;
+        self.cur_input = self.input_stack[self.input_ptr];
+    }
+
+    /// §328: `begin_file_reading`.
+    pub fn begin_file_reading_with_hooks(
+        &mut self,
+        hooks: &mut dyn ErrorHooks,
+    ) -> Result<(), Termination> {
+        if self.in_open == self.config.max_in_open {
+            return Err(self.overflow_with_hooks(
+                pool_str("text input levels"),
+                self.config.max_in_open as i32,
+                hooks,
+            ));
+        }
+        if self.first == self.config.buf_size {
+            return Err(self.overflow_with_hooks(
+                StrNum::BUFFER_SIZE,
+                self.config.buf_size as i32,
+                hooks,
+            ));
+        }
+        self.in_open += 1;
+        self.push_input(hooks)?;
         self.cur_input.index_field = self.in_open as u8;
         self.line_stack[self.in_open] = self.line;
         self.cur_input.start_field = self.first;
         self.cur_input.state_field = 1; // mid_line
         self.cur_input.name_field = StrNum::ZERO;
+        Ok(())
+    }
+
+    /// Default M3 input-stack push for `begin_file_reading` (§328).
+    pub fn begin_file_reading_default(&mut self) {
+        let mut hooks = NoopErrorHooks;
+        let _ = self.begin_file_reading_with_hooks(&mut hooks);
     }
 
     /// Default M3 input-stack pop for `end_file_reading` (§329).
@@ -2290,9 +2330,47 @@ impl IoState {
         if self.cur_input.name_field.0 > 17 {
             self.input_file[usize::from(self.cur_input.index_field)].close();
         }
-        self.input_ptr -= 1;
-        self.cur_input = self.input_stack[self.input_ptr];
+        self.pop_input();
         self.in_open -= 1;
+    }
+
+    /// §330: `clear_for_error_prompt`.
+    pub fn clear_for_error_prompt_default(&mut self) {
+        while self.cur_input.state_field != 0
+            && self.cur_input.name_field == StrNum::ZERO
+            && self.input_ptr > 0
+            && self.cur_input.loc_field > self.cur_input.limit_field
+        {
+            self.end_file_reading_default();
+        }
+        self.print_ln();
+        self.clear_terminal();
+    }
+
+    /// §363: `firm_up_the_line`.
+    pub fn firm_up_the_line(&mut self, hooks: &mut dyn ErrorHooks) -> Result<(), Termination> {
+        self.cur_input.limit_field = self.last;
+        if self.pausing > 0 && self.interaction > Interaction::NonstopMode {
+            self.wake_up_terminal();
+            self.print_ln();
+            let start = self.cur_input.start_field;
+            let limit = self.cur_input.limit_field;
+            if start < limit {
+                for k in start..limit {
+                    let b = self.buffer[k];
+                    self.print(i32::from(b));
+                }
+            }
+            self.first = limit;
+            self.prompt_input(pool_str("=>"), hooks)?;
+            if self.last > self.first {
+                for k in self.first..self.last {
+                    self.buffer[k + start - self.first] = self.buffer[k];
+                }
+                self.cur_input.limit_field = start + self.last - self.first;
+            }
+        }
+        Ok(())
     }
 
     /// §§537–538: File lookup, log opening, `(name` printing, pool conservation, and first-line reading after `cur_name`/`cur_area`/`cur_ext` are set.
@@ -2305,7 +2383,7 @@ impl IoState {
         }
         self.pack_cur_name();
         loop {
-            hooks.begin_file_reading(self);
+            hooks.begin_file_reading(self)?;
             let candidate = String::from_utf8_lossy(&self.name_of_file).into_owned();
             if let Some(f) = self.host.a_open_in(&candidate) {
                 self.input_file[usize::from(self.cur_input.index_field)] = f;
@@ -2349,7 +2427,7 @@ impl IoState {
         let res = self.input_ln_with_hooks(&mut file, false, hooks);
         self.input_file[idx] = file;
         let _ = res?;
-        self.cur_input.limit_field = self.last;
+        self.firm_up_the_line(hooks)?;
         if self.end_line_char < 0 || self.end_line_char > 255 {
             self.cur_input.limit_field = self.cur_input.limit_field.saturating_sub(1);
         } else {
