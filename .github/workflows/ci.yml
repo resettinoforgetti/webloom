@@ -1,0 +1,39 @@
+name: Rust and source verification
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ["1.85.0", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        env:
+          TOOLCHAIN: ${{ matrix.rust }}
+        run: |
+          rustup toolchain install "$TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+          rustup default "$TOOLCHAIN"
+      - name: Verify pinned sources and coverage ledger
+        run: |
+          python3 scripts/verify_sources.py
+          python3 scripts/verify_coverage.py
+          python3 -B scripts/test_reference_trip.py
+      - name: Format, build, and lint
+        run: |
+          cargo fmt --check
+          cargo check --locked --all-targets
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: Test debug and release behavior
+        run: |
+          cargo test --locked
+          cargo test --locked --release
+          cargo run --locked -- --version

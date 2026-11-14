@@ -81,3 +81,18 @@ Local supporting input origins:
 - `/usr/share/texlive/texmf-dist/web2c/texmf.cnf`
 - `/etc/texmf/web2c/texmf.cnf`
 - `/usr/share/doc/texlive-binaries/copyright`
+
+## Pinned reference candidate added 2026-11-14
+
+The new `scripts/reference-build.json` pins TeX Live source commit
+`dce038dd1bd98fac739254da4a2066c8347cdf6c`, the complete ordered TeX change-file
+chain, configure flags, and source epoch. `scripts/build_reference.py` verifies
+the clean checkout and normative tex.web hash before building. Source timestamps
+are normalized to the pinned epoch to avoid regenerating shipped generated
+files; source bytes are not patched.
+
+Each build retains compiler/tool versions, build commands/logs, change-file and
+generated-source hashes, executable hashes, and linked-library paths/hashes in
+`webloom-build.json`. This candidate is separate from the historical installed
+Debian engine above. Its full provenance is now known, but profile/clock
+qualification remains pending; see [reference.md](reference.md).
