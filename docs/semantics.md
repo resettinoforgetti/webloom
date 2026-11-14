@@ -204,3 +204,28 @@ popped. This preserves old parameters while scanning nested arguments and
 reclaims old inputs for tail calls. The new body holds a reference until popped,
 and parameter capacity is checked before writing the stack. Tracing prints the
 definition and each argument via the same token diagnostics used by the scanner.
+
+## M4 Expansion, Scanners, Conditionals, and Assignments
+
+- **S** (`§§366–386`): `expand` dispatches `cur_cmd > MAX_COMMAND` to `macro_call`,
+  `\expandafter`, `\noexpand` (inserting `frozen_dont_expand`), `\csname...\endcsname`
+  (defining undefined control sequences as `\relax`), `conv_toks` (`\number`,
+  `\romannumeral`, `\string`, `\meaning`, `\fontname`, `\jobname`), `ins_the_toks`
+  (`\the`), `conditional`, and `fi_or_else`. `get_x_token` and `x_token` expand
+  until a non-expandable command is reached.
+- **S** (`§§402–486, §526`): `scan_int` handles signs, alphabetic constants,
+  octal/hex/decimal radices, and internal integers via `scan_something_internal`.
+  `scan_dimen` and `scan_glue` parse physical/mu/infinite units and `plus`/`minus`
+  glue specs. `scan_toks` builds balanced parameter/replacement token lists for
+  definitions and registers. `scan_file_name` skips leading spaces and feeds
+  character tokens into `IoState::more_name_with_hooks` / `end_name_with_hooks`.
+- **P** (`§455`): `em` and `ex` units in `scan_dimen` and `\fontname` in
+  `conv_toks` use minimal M4 stubs (`10pt` / `nullfont`) until M5 TFM loading.
+- **S** (`§§487–510`): `conditional` and `fi_or_else` manage the `cond_ptr`
+  stack (`if_limit`, `cur_if`, `if_line`) and `pass_text` skipping for nested
+  `\ifnum`, `\ifdim`, `\ifodd`, `\if`, `\ifcat`, `\ifx`, `\iftrue`, `\iffalse`,
+  and `\ifcase...\or...\else...\fi`.
+- **S** (`§§1208–1270`): `prefixed_command` accumulates `\global`/`\long`/`\outer`
+  prefixes and executes `\def`/`\gdef`/`\edef`/`\xdef`, `\let`/`\futurelet`,
+  shorthand definitions, register/parameter assignments, `\advance`/`\multiply`/
+  `\divide`, and `\catcode` et al. via `SaveStack`.

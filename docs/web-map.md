@@ -50,6 +50,6 @@ The independent interval model also checks ring links, allocation-kind metadata,
 and the complete low-region partition. §126 retains division of the nonnegative
 frontier difference. §§131–132 `sort_avail` remain a format-preparation dependency.
 
-Next engine slices: expansion dispatch, basic value scanners, definition
-scanning, conditionals, and assignments (`M4`) in [the roadmap](roadmap.md). The
-full [coverage ledger](coverage.md) assigns every source part to a milestone.
+M4 expansion dispatch (`expand`, `get_x_token`, `x_token`, `\expandafter`, `\noexpand`, `\csname`, `conv_toks`, `§§366–386, §§470–472`) and conditionals (`push_cond`, `pop_cond`, `pass_text`, `change_if_limit`, `conditional`, `fi_or_else`, `§§487–510`) live in `src/expansion.rs`. Basic value scanners (`scan_left_brace`, `scan_optional_equals`, `scan_keyword`, `scan_something_internal`, `scan_int`, `scan_dimen`, `scan_glue`, `scan_toks`, `the_toks`, `§§402–486`) and token-driven `scan_file_name` (`§526`) live in `src/scanners.rs`. Mode-independent assignments and definition scanning (`get_r_token`, `prefixed_command`, `do_assignments`, `§§1208–1270`) live in `src/assignments.rs`, verified by `tests/m4_subsystems.rs`.
+
+Next engine slices: font metrics and DVI/box/list foundations (`M5`) in [the roadmap](roadmap.md). The full [coverage ledger](coverage.md) assigns every source part to a milestone.
